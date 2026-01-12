@@ -20,7 +20,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string | null, mobileNumber: string | null, password: string | null, otp: string | null) => Promise<{ success: boolean; error?: string; user?: User }>;
-  register: (name: string, email: string | null, mobileNumber: string | null, password: string | null, otp: string | null, role: string) => Promise<{ success: boolean; error?: string; user?: User }>;
+  register: (name: string, email: string | null, mobileNumber: string | null, password: string | null, otp: string | null, role: string, departmentId?: string | null) => Promise<{ success: boolean; error?: string; user?: User }>;
   logout: () => void;
   refreshUser: () => Promise<User | null>;
 }
@@ -30,33 +30,53 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState<string | null>(null);
 
+  // Fetch user on mount if token exists in localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('token');
-      setToken(storedToken);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (token) {
-      // Token is set, fetch user
-      fetchUser();
-    } else {
+    const initializeAuth = async () => {
+      if (typeof window !== 'undefined') {
+        const storedToken = localStorage.getItem('token');
+        
+        if (storedToken) {
+          // Token exists, fetch user
+          try {
+            const response = await axiosInstance.get('/auth/me');
+            setUser(response.data);
+          } catch (error: any) {
+            console.error('Error fetching user on init:', error);
+            // Only clear token if it's an authentication error (401 or 403)
+            // Network errors (no response) shouldn't clear the token
+            if (error.response?.status === 401 || error.response?.status === 403) {
+              // Token is invalid/expired, clear it
+              localStorage.removeItem('token');
+              setUser(null);
+            }
+            // For network errors, keep the token but don't set user
+            // User will need to refresh or the next API call will handle it
+          }
+        }
+      }
       setLoading(false);
-    }
-  }, [token]);
+    };
+
+    initializeAuth();
+  }, []); // Run only once on mount
 
   const fetchUser = async () => {
     try {
       const response = await axiosInstance.get('/auth/me');
       setUser(response.data);
-    } catch (error) {
+      return response.data;
+    } catch (error: any) {
       console.error('Error fetching user:', error);
-      logout();
-    } finally {
-      setLoading(false);
+      // Only clear token if it's an authentication error
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        setUser(null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+        }
+      }
+      throw error;
     }
   };
 
@@ -98,7 +118,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       // Update state
-      setToken(newToken);
       setUser(userData);
       
       toast.success('Login successful!');
@@ -116,7 +135,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     mobileNumber: string | null,
     password: string | null,
     otp: string | null,
-    role: string
+    role: string,
+    departmentId?: string | null
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       const registerData: any = {
@@ -132,6 +152,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         registerData.mobileNumber = mobileNumber;
         registerData.otp = otp;
       }
+      if (departmentId) {
+        registerData.departmentId = parseInt(departmentId);
+      }
 
       const response = await axios.post('http://localhost:5000/api/auth/register', registerData);
       const { token: newToken, user: userData } = response.data;
@@ -142,7 +165,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       // Update state
-      setToken(newToken);
       setUser(userData);
       
       toast.success('Registration successful!');
@@ -155,12 +177,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    setToken(null);
     setUser(null);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
+      toast.success('Logged out successfully');
     }
-    toast.success('Logged out successfully');
   };
 
   return (

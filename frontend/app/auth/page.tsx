@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
-import { User, Mail, Lock, Phone, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Lock, Phone, Eye, EyeOff, Building2 } from 'lucide-react';
 import OTPVerificationModal from '../components/OTPVerificationModal';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
 import axiosInstance from '../utils/axios';
@@ -49,9 +49,19 @@ const AuthPage = () => {
     password: '',
     otp: '',
     role: '',
+    departmentId: '',
     showPassword: false,
     useOTP: false
   });
+
+  // Departments state
+  const [departments, setDepartments] = useState<Array<{id: number, name: string, code?: string}>>([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(false);
+
+  // Fetch departments on mount
+  useEffect(() => {
+    fetchDepartments();
+  }, []);
 
   useEffect(() => {
     if (!searchParams) return;
@@ -70,6 +80,24 @@ const AuthPage = () => {
       handleTabChange('signin');
     }
   }, [searchParams]);
+
+  const fetchDepartments = async () => {
+    setLoadingDepartments(true);
+    try {
+      const response = await axiosInstance.get('/departments', {
+        params: { isActive: 'true' }
+      });
+      setDepartments(response.data.departments || []);
+    } catch (error: any) {
+      console.error('Error fetching departments:', error);
+      // Don't show error toast on mount - might be silent failure
+      if (error.response?.status !== 401) {
+        console.error('Failed to fetch departments:', error.response?.data?.message || error.message);
+      }
+    } finally {
+      setLoadingDepartments(false);
+    }
+  };
 
   const handleTabChange = (newTab: React.SetStateAction<string>) => {
     if (newTab === activeTab || isTransitioning) return;
@@ -210,6 +238,17 @@ const AuthPage = () => {
       return { success: false, error: 'OTP not verified' };
     }
 
+    // Validate required fields
+    if (!registerData.role) {
+      toast.error('Please select a role');
+      return { success: false, error: 'Role is required' };
+    }
+    // Department is required only for employees, not for admins
+    if (registerData.role === 'employee' && !registerData.departmentId) {
+      toast.error('Please select a department');
+      return { success: false, error: 'Department is required for employees' };
+    }
+
     // For OTP registration, backend will verify OTP during registration
     const result = await register(
       registerData.name,
@@ -217,7 +256,8 @@ const AuthPage = () => {
       registerData.mobileNumber || null,
       registerData.password || null,
       registerOtpVerified ? 'verified' : null, // Pass flag that OTP is verified
-      registerData.role
+      registerData.role,
+      registerData.role === 'employee' ? registerData.departmentId : null // Only pass departmentId for employees
     );
     
     if (result.success) {
@@ -508,15 +548,6 @@ const AuthPage = () => {
                       <span className="text-sm text-green-700 font-medium">OTP Verified</span>
                     </div>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={handleSendRegisterOTP}
-                    disabled={sendingRegisterOtp || !registerData.mobileNumber || !/^[0-9]{10}$/.test(registerData.mobileNumber) || registerOtpVerified}
-                    className="w-full bg-gray-600 text-white py-2.5 rounded-lg font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    {sendingRegisterOtp ? 'Sending OTP...' : registerOtpVerified ? 'OTP Verified ✓' : 'Send OTP'}
-                  </button>
                 </>
               )}
 
@@ -524,13 +555,60 @@ const AuthPage = () => {
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <select
                   value={registerData.role}
-                  onChange={(e) => setRegisterData({...registerData, role: e.target.value})}
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    setRegisterData({
+                      ...registerData, 
+                      role: newRole, 
+                      departmentId: newRole === 'employee' ? registerData.departmentId : '' // Clear department if switching to admin
+                    });
+                  }}
                   className="w-full pl-10 pr-4 py-2.5 bg-gray-100 border-none rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none text-sm"
                 >
+                  <option value="">Select Role</option>
                   <option value="employee">Employee</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
+
+              {/* Department Selection - Only show if role is employee (admin doesn't need department) */}
+              {registerData.role === 'employee' && (
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <select
+                    name="departmentId"
+                    value={registerData.departmentId}
+                    onChange={(e) => setRegisterData({...registerData, departmentId: e.target.value})}
+                    disabled={loadingDepartments}
+                    required
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-100 border-none rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select Department *</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id.toString()}>
+                        {dept.name} {dept.code ? `(${dept.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {loadingDepartments && (
+                    <p className="text-xs text-gray-500 mt-1 ml-3">Loading departments...</p>
+                  )}
+                  {departments.length === 0 && !loadingDepartments && (
+                    <p className="text-xs text-gray-500 mt-1 ml-3">No departments available. Contact admin.</p>
+                  )}
+                </div>
+              )}
+
+              {registerData.useOTP && (
+                <button
+                  type="button"
+                  onClick={handleSendRegisterOTP}
+                  disabled={sendingRegisterOtp || !registerData.mobileNumber || !/^[0-9]{10}$/.test(registerData.mobileNumber) || registerOtpVerified}
+                  className="w-full bg-gray-600 text-white py-2.5 rounded-lg font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {sendingRegisterOtp ? 'Sending OTP...' : registerOtpVerified ? 'OTP Verified ✓' : 'Send OTP'}
+                </button>
+              )}
 
               <button
                 onClick={() => setRegisterData({...registerData, useOTP: !registerData.useOTP})}

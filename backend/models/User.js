@@ -94,6 +94,11 @@ const User = sequelize.define('User', {
       showStatistics: true
     },
     comment: 'User dashboard preferences'
+  },
+  departmentId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'Department ID (foreign key to Departments table)'
   }
 }, {
   hooks: {

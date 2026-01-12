@@ -1,4 +1,4 @@
-// File: C:\Users\hp\attendance\frontend\app\dashboard\page.tsx
+// File: /Users/apple/Attendance/attendance/frontend/app/dashboard/page.tsx
 import * as entry from '../../../../app/dashboard/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, Calendar, History, User, Settings } from 'lucide-react';
+import { LogOut, Calendar, History, User, Settings, Users } from 'lucide-react';
 import ChangePasswordModal from './ChangePasswordModal';
 
 const Navbar: React.FC = () => {
@@ -73,6 +73,18 @@ const Navbar: React.FC = () => {
                 <History size={20} className="mr-2" />
                 History
               </Link>
+              {user?.role === 'admin' && (
+                <>
+                  <Link href="/dashboard/admin" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-100 transition-colors">
+                    <Settings size={20} className="mr-2" />
+                    Admin
+                  </Link>
+                  <Link href="/users" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-100 transition-colors">
+                    <Users size={20} className="mr-2" />
+                    Employees
+                  </Link>
+                </>
+              )}
               
               {/* User Profile Dropdown */}
               <div className="relative" ref={dropdownRef}>

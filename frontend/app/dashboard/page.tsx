@@ -409,7 +409,7 @@ const Dashboard: React.FC = () => {
               My Attendance
             </Link>
             <Link 
-              href="/dashboard" 
+              href="/leave" 
               className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
             >
               <Plane className="w-5 h-5" />

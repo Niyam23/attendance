@@ -1,4 +1,4 @@
-const { Attendance, User } = require('../models');
+const { Attendance, User, LeaveRequest, LeaveBalance } = require('../models');
 const { Op } = require('sequelize');
 
 exports.checkIn = async (req, res) => {
@@ -133,6 +133,7 @@ exports.getTodayStatus = async (req, res) => {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const todayStr = today.toISOString().split('T')[0];
 
     const attendance = await Attendance.findOne({
       where: {
@@ -144,10 +145,27 @@ exports.getTodayStatus = async (req, res) => {
       }
     });
 
+    // Check if user is on leave today
+    const leaveRequest = await LeaveRequest.findOne({
+      where: {
+        userId,
+        status: 'approved',
+        startDate: { [Op.lte]: todayStr },
+        endDate: { [Op.gte]: todayStr }
+      }
+    });
+
     res.json({
       checkedIn: !!attendance,
       checkedOut: !!attendance?.checkOut,
-      attendance: attendance || null
+      attendance: attendance || null,
+      onLeave: !!leaveRequest,
+      leaveRequest: leaveRequest ? {
+        id: leaveRequest.id,
+        leaveType: leaveRequest.leaveType,
+        startDate: leaveRequest.startDate,
+        endDate: leaveRequest.endDate
+      } : null
     });
   } catch (error) {
     console.error('Get today status error:', error);
@@ -352,8 +370,44 @@ exports.getDashboardStats = async (req, res) => {
       });
     }
 
-    // Get leave balance (default 12 days, can be extended with leave management system)
-    const leaveBalance = 12; // This would come from a leave management system
+    // Get leave balance from leave management system
+    const year = now.getFullYear();
+    const leaveBalances = await LeaveBalance.findAll({
+      where: { userId, year }
+    });
+    const totalLeaveBalance = leaveBalances.reduce((sum, lb) => sum + parseFloat(lb.remainingDays), 0);
+
+    // Get approved leaves in the period
+    const approvedLeaves = await LeaveRequest.findAll({
+      where: {
+        userId,
+        status: 'approved',
+        [Op.or]: [
+          {
+            startDate: { [Op.lte]: endDate.toISOString().split('T')[0] },
+            endDate: { [Op.gte]: startDate.toISOString().split('T')[0] }
+          }
+        ]
+      }
+    });
+
+    // Calculate leave days in the period
+    let leaveDays = 0;
+    approvedLeaves.forEach(leave => {
+      const leaveStart = new Date(Math.max(new Date(leave.startDate).getTime(), startDate.getTime()));
+      const leaveEnd = new Date(Math.min(new Date(leave.endDate).getTime(), endDate.getTime()));
+      if (leaveEnd >= leaveStart) {
+        // Count working days in the overlapping period
+        let currentDate = new Date(leaveStart);
+        while (currentDate <= leaveEnd) {
+          const dayOfWeek = currentDate.getDay();
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Exclude weekends
+            leaveDays++;
+          }
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      }
+    });
 
     // Calculate streak (consecutive present days)
     let streak = 0;
@@ -387,10 +441,11 @@ exports.getDashboardStats = async (req, res) => {
         presentDays,
         halfDays,
         absentDays,
+        leaveDays,
         totalHours: parseFloat(totalHours.toFixed(2)),
         averageHours: parseFloat(averageHours),
         attendancePercentage: parseFloat(attendancePercentage),
-        leaveBalance,
+        leaveBalance: parseFloat(totalLeaveBalance.toFixed(1)),
         streak
       },
       chartData

@@ -21,7 +21,7 @@ exports.register = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, mobileNumber, password, role, otp } = req.body;
+    const { name, email, mobileNumber, password, role, otp, departmentId } = req.body;
 
     // Validate that either email or mobileNumber is provided
     if (!email && !mobileNumber) {
@@ -121,6 +121,27 @@ exports.register = async (req, res) => {
     }
     if (password) {
       userData.password = password;
+    }
+    // Department is REQUIRED only for employees, not for admins
+    if (userRole === 'employee') {
+      if (!departmentId) {
+        return res.status(400).json({ message: 'Department is required for employees' });
+      }
+
+      // Validate department exists and is active
+      const { Department } = require('../models');
+      const department = await Department.findByPk(departmentId);
+      if (!department) {
+        return res.status(400).json({ message: 'Invalid department selected' });
+      }
+      if (!department.isActive) {
+        return res.status(400).json({ message: 'Selected department is inactive. Please contact admin.' });
+      }
+      
+      userData.departmentId = parseInt(departmentId);
+    } else {
+      // Admin doesn't need a department
+      userData.departmentId = null;
     }
 
     const user = await User.create(userData);
@@ -286,6 +307,89 @@ exports.getMe = async (req, res) => {
     res.json(user);
   } catch (error) {
     console.error('Get me error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get all users (Admin only)
+exports.getAllUsers = async (req, res) => {
+  try {
+    const { role, search, page = 1, limit = 10, includeLeaveBalance = false } = req.query;
+
+    // Build where clause
+    const where = {};
+
+    // Filter by role if provided
+    if (role) {
+      where.role = role;
+    } else {
+      // Default: show all roles
+      where.role = { [Op.in]: ['employee', 'admin'] };
+    }
+
+    // Search functionality
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { employeeId: { [Op.like]: `%${search}%` } },
+        { mobileNumber: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    const offset = (page - 1) * limit;
+
+    // Get users with pagination
+    const { Department } = require('../models');
+    const { count, rows } = await User.findAndCountAll({
+      where,
+      attributes: { exclude: ['password'] },
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      include: [
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code'],
+          required: false
+        }
+      ]
+    });
+
+    // If includeLeaveBalance is true, fetch leave balances for each user
+    let usersWithBalances = rows;
+    if (includeLeaveBalance === 'true') {
+      const { LeaveBalance } = require('../models');
+      const userIds = rows.map(u => u.id);
+      const currentYear = new Date().getFullYear();
+
+      const leaveBalances = await LeaveBalance.findAll({
+        where: {
+          userId: { [Op.in]: userIds },
+          year: currentYear
+        }
+      });
+
+      // Map leave balances to users
+      usersWithBalances = rows.map(user => {
+        const userBalances = leaveBalances.filter(lb => lb.userId === user.id);
+        return {
+          ...user.toJSON(),
+          leaveBalances: userBalances
+        };
+      });
+    }
+
+    res.json({
+      total: count,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(count / limit),
+      users: usersWithBalances
+    });
+  } catch (error) {
+    console.error('Get all users error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

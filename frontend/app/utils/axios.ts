@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -34,14 +34,18 @@ axiosInstance.interceptors.response.use(
     if (error.response?.status === 401) {
       // Don't redirect for password change errors - let the component handle them
       const url = error.config?.url || '';
-      if (url.includes('/change-password')) {
-        // Don't redirect, just return the error
+      if (url.includes('/change-password') || url.includes('/auth/me')) {
+        // Don't redirect, just return the error - let AuthContext handle it
         return Promise.reject(error);
       }
       
-      // Token expired or invalid, clear it
-      if (typeof window !== 'undefined') {
+      // Don't redirect if we're already on the auth page or if it's the initial auth check
+      if (typeof window !== 'undefined' && 
+          window.location.pathname !== '/auth' && 
+          !url.includes('/auth/me')) {
+        // Token expired or invalid, clear it
         localStorage.removeItem('token');
+        // Only redirect if not already on auth page and not during initial auth check
         window.location.href = '/auth';
       }
     }
