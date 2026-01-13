@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const fetchUser = async (): Promise<void> => {
     try {
-      const response = await axios.get('http://localhost:5000/api/auth/me');
+      const response = await axios.get('http://192.168.1.29:5000/api/auth/me');
       setUser(response.data);
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         loginData.otp = otp;
       }
 
-      const response = await axios.post('http://localhost:5000/api/auth/login', loginData);
+      const response = await axios.post('http://192.168.1.29:5000/api/auth/login', loginData);
       const { token: newToken, user: userData } = response.data;
       setToken(newToken);
       setUser(userData);
@@ -112,7 +112,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         registerData.otp = otp;
       }
 
-      const response = await axios.post('http://localhost:5000/api/auth/register', registerData);
+      const response = await axios.post('http://192.168.1.29:5000/api/auth/register', registerData);
       const { token: newToken, user: userData } = response.data;
       setToken(newToken);
       setUser(userData);

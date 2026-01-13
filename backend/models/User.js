@@ -85,6 +85,11 @@ const User = sequelize.define('User', {
     defaultValue: false,
     comment: 'Whether user has completed onboarding'
   },
+  faceEmbedding: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'FaceNet embedding (128-dimensional vector as JSON)'
+  },
   preferences: {
     type: DataTypes.JSON,
     allowNull: true,

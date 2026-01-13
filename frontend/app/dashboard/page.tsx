@@ -1,17 +1,17 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axiosInstance from '../utils/axios';
 import toast from 'react-hot-toast';
-import PrivateRoute from '../components/PrivateRoute';
+import EmployeeLayout from '../components/EmployeeLayout';
 import { useAuth } from '../context/AuthContext';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ChangePasswordModal from '../components/ChangePasswordModal';
+import FaceCapture from '../components/FaceCapture';
 import { 
-  LayoutDashboard, Calendar, Plane, RotateCcw, User, 
-  LogOut, Clock, Bell, Coffee, LogIn, LogOut as LogOutIcon,
-  MapPin, TrendingUp, Briefcase, ChevronDown, ArrowRight, History, Settings
+  Clock, Bell, Coffee, LogOut as LogOutIcon,
+  MapPin, TrendingUp, Briefcase, ChevronDown, User, UtensilsCrossed, X
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -21,6 +21,12 @@ interface TodayStatus {
   attendance?: {
     checkIn: string;
     checkOut?: string;
+    break1Start?: string;
+    break1End?: string;
+    break2Start?: string;
+    break2End?: string;
+    lunchStart?: string;
+    lunchEnd?: string;
   };
 }
 
@@ -37,6 +43,13 @@ interface DashboardStats {
   }>;
 }
 
+interface LeaveBalance {
+  leaveType: string;
+  totalDays: number;
+  usedDays: number;
+  remainingDays: number;
+}
+
 interface AttendanceRecord {
   id: number;
   checkIn: string;
@@ -46,38 +59,23 @@ interface AttendanceRecord {
 }
 
 const Dashboard: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
   const [todayStatus, setTodayStatus] = useState<TodayStatus | null>(null);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [recentAttendance, setRecentAttendance] = useState<AttendanceRecord[]>([]);
   const [weeklyData, setWeeklyData] = useState<Array<{day: string; hours: number}>>([]);
+  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
   const [elapsedTime, setElapsedTime] = useState('0h 0m');
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowUserDropdown(false);
-      }
-    };
-
-    if (showUserDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showUserDropdown]);
+  const [showFaceCapture, setShowFaceCapture] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'checkin' | 'checkout' | 'break-start' | 'break-end' | null>(null);
+  const [selectedBreakType, setSelectedBreakType] = useState<'break1' | 'lunch' | 'break2' | null>(null);
+  const [showBreakModal, setShowBreakModal] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -122,10 +120,21 @@ const Dashboard: React.FC = () => {
         fetchDashboardStats(),
         fetchRecentAttendance(),
         fetchUserProfile(),
-        fetchWeeklyData()
+        fetchWeeklyData(),
+        fetchLeaveBalances()
       ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLeaveBalances = async () => {
+    try {
+      const response = await axiosInstance.get('/leave/balance');
+      setLeaveBalances(response.data.balances || []);
+    } catch (error) {
+      console.error('Error fetching leave balances:', error);
+      setLeaveBalances([]);
     }
   };
 
@@ -234,32 +243,171 @@ const Dashboard: React.FC = () => {
   };
 
 
-  const handleCheckIn = async () => {
+  const handleFaceCaptured = async (imageData: string) => {
+    if (!pendingAction) return;
+
+    setShowFaceCapture(false);
     setChecking(true);
+
     try {
-      await axiosInstance.post('/attendance/checkin');
-      toast.success('Checked in successfully!');
+      // First verify face identity
+      const verifyResponse = await axiosInstance.post('/face/verify', {
+        imageData
+      });
+
+      if (!verifyResponse.data.verified) {
+        toast.error('Face verification failed. Please try again.');
+        setChecking(false);
+        return;
+      }
+
+      // Face verified, proceed with action
+      if (pendingAction === 'checkin') {
+        await axiosInstance.post('/attendance/checkin', {
+          faceImage: imageData
+        });
+        toast.success('Checked in successfully!');
+      } else if (pendingAction === 'checkout') {
+        await axiosInstance.post('/attendance/checkout', {
+          faceImage: imageData
+        });
+        toast.success('Checked out successfully!');
+      } else if (pendingAction === 'break-start' && selectedBreakType) {
+        await axiosInstance.post('/attendance/break/start', {
+          breakType: selectedBreakType,
+          faceImage: imageData
+        });
+        const breakNames: { [key: string]: string } = {
+          break1: 'Break 1',
+          lunch: 'Lunch',
+          break2: 'Break 2'
+        };
+        toast.success(`${breakNames[selectedBreakType]} started successfully!`);
+        setSelectedBreakType(null);
+      } else if (pendingAction === 'break-end' && selectedBreakType) {
+        await axiosInstance.post('/attendance/break/end', {
+          breakType: selectedBreakType,
+          faceImage: imageData
+        });
+        const breakNames: { [key: string]: string } = {
+          break1: 'Break 1',
+          lunch: 'Lunch',
+          break2: 'Break 2'
+        };
+        toast.success(`${breakNames[selectedBreakType]} ended successfully!`);
+        setSelectedBreakType(null);
+      }
+      setPendingAction(null);
       fetchAllData();
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Failed to check in';
+      const message = error.response?.data?.message || `Failed to ${pendingAction}`;
+      toast.error(message);
+      setPendingAction(null);
+      setSelectedBreakType(null);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleCheckIn = () => {
+    setPendingAction('checkin');
+    setShowFaceCapture(true);
+  };
+
+  const handleCheckOut = () => {
+    setPendingAction('checkout');
+    setShowFaceCapture(true);
+  };
+
+  const handleFaceCaptureClose = () => {
+    setShowFaceCapture(false);
+    setPendingAction(null);
+    setSelectedBreakType(null);
+  };
+
+  const handleBreakClick = () => {
+    setShowBreakModal(true);
+  };
+
+  const handleStartBreak = async (breakType: 'break1' | 'lunch' | 'break2') => {
+    setShowBreakModal(false);
+    setChecking(true);
+    try {
+      await axiosInstance.post('/attendance/break/start', {
+        breakType
+      });
+      const breakNames: { [key: string]: string } = {
+        break1: 'Break 1',
+        lunch: 'Lunch',
+        break2: 'Break 2'
+      };
+      toast.success(`${breakNames[breakType]} started successfully!`);
+      fetchAllData();
+    } catch (error: any) {
+      const message = error.response?.data?.message || `Failed to start ${breakType}`;
       toast.error(message);
     } finally {
       setChecking(false);
     }
   };
 
-  const handleCheckOut = async () => {
+  const handleEndBreak = async (breakType: 'break1' | 'lunch' | 'break2') => {
+    setShowBreakModal(false);
     setChecking(true);
     try {
-      await axiosInstance.post('/attendance/checkout');
-      toast.success('Checked out successfully!');
+      await axiosInstance.post('/attendance/break/end', {
+        breakType
+      });
+      const breakNames: { [key: string]: string } = {
+        break1: 'Break 1',
+        lunch: 'Lunch',
+        break2: 'Break 2'
+      };
+      toast.success(`${breakNames[breakType]} ended successfully!`);
       fetchAllData();
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Failed to check out';
+      const message = error.response?.data?.message || `Failed to end ${breakType}`;
       toast.error(message);
     } finally {
       setChecking(false);
     }
+  };
+
+  const getBreakStatus = (breakType: 'break1' | 'lunch' | 'break2') => {
+    if (!todayStatus?.attendance) return null;
+    const startField = `${breakType}Start`;
+    const endField = `${breakType}End`;
+    const start = todayStatus.attendance[startField as keyof typeof todayStatus.attendance] as string | undefined;
+    const end = todayStatus.attendance[endField as keyof typeof todayStatus.attendance] as string | undefined;
+    
+    if (!start) return 'not-started';
+    if (start && !end) return 'active';
+    return 'completed';
+  };
+
+  const getBreakDuration = (breakType: 'break1' | 'lunch' | 'break2') => {
+    if (!todayStatus?.attendance) return null;
+    const startField = `${breakType}Start`;
+    const endField = `${breakType}End`;
+    const start = todayStatus.attendance[startField as keyof typeof todayStatus.attendance] as string | undefined;
+    const end = todayStatus.attendance[endField as keyof typeof todayStatus.attendance] as string | undefined;
+    
+    if (!start) return null;
+    if (!end) {
+      // Calculate elapsed time if break is active
+      const startTime = new Date(start);
+      const now = new Date();
+      const diffMs = now.getTime() - startTime.getTime();
+      const minutes = Math.floor(diffMs / (1000 * 60));
+      return `${minutes}m`;
+    }
+    
+    // Calculate completed duration
+    const startTime = new Date(start);
+    const endTime = new Date(end);
+    const diffMs = endTime.getTime() - startTime.getTime();
+    const minutes = Math.floor(diffMs / (1000 * 60));
+    return `${minutes}m`;
   };
 
   const formatTime = (dateString: string) => {
@@ -304,7 +452,7 @@ const Dashboard: React.FC = () => {
 
   // Get today's timeline events
   const getTodayTimeline = () => {
-    const events = [];
+    const events: Array<{time: string; title: string; status?: string; location: string; color: string; completed: boolean}> = [];
     
     if (todayStatus?.attendance?.checkIn) {
       const checkInTime = new Date(todayStatus.attendance.checkIn);
@@ -319,212 +467,119 @@ const Dashboard: React.FC = () => {
         completed: true
       });
     }
-    
-    // Add scheduled events (these would come from a calendar/events API)
-    events.push({
-      time: '11:30 AM',
-      title: 'Meeting with Product Team',
-      location: 'Conference Room A',
-      color: 'blue',
-      completed: false
-    });
-    
-    events.push({
-      time: '01:00 PM',
-      title: 'Lunch Break',
-      location: 'Scheduled',
-      color: 'gray',
-      completed: false
+
+    // Add break events
+    const breakTypes = [
+      { type: 'break1' as const, name: 'Break 1', icon: Coffee },
+      { type: 'lunch' as const, name: 'Lunch Break', icon: UtensilsCrossed },
+      { type: 'break2' as const, name: 'Break 2', icon: Coffee }
+    ];
+
+    breakTypes.forEach(({ type, name }) => {
+      const startField = `${type}Start`;
+      const endField = `${type}End`;
+      const start = todayStatus?.attendance?.[startField as keyof typeof todayStatus.attendance] as string | undefined;
+      const end = todayStatus?.attendance?.[endField as keyof typeof todayStatus.attendance] as string | undefined;
+
+      if (start) {
+        events.push({
+          time: formatTime(start),
+          title: `${name} Started`,
+          location: 'Web Portal',
+          color: 'blue',
+          completed: true
+        });
+      }
+
+      if (end) {
+        events.push({
+          time: formatTime(end),
+          title: `${name} Ended`,
+          location: 'Web Portal',
+          color: 'gray',
+          completed: true
+        });
+      }
     });
     
     if (todayStatus?.checkedOut && todayStatus?.attendance?.checkOut) {
       events.push({
         time: formatTime(todayStatus.attendance.checkOut),
         title: 'Check Out',
-        location: 'Scheduled',
-        color: 'gray',
+        location: 'Web Portal',
+        color: 'green',
         completed: true
-      });
-    } else {
-      events.push({
-        time: '06:00 PM',
-        title: 'Check Out',
-        location: 'Scheduled',
-        color: 'gray',
-        completed: false
       });
     }
     
-    return events;
+    // Sort events by time
+    return events.sort((a, b) => {
+      const timeA = new Date(`2000-01-01 ${a.time}`).getTime();
+      const timeB = new Date(`2000-01-01 ${b.time}`).getTime();
+      return timeA - timeB;
+    });
   };
 
   if (loading) {
     return (
-      <PrivateRoute>
+      <EmployeeLayout>
         <div className="flex justify-center items-center h-screen">
           <div className="text-lg">Loading...</div>
         </div>
-      </PrivateRoute>
+      </EmployeeLayout>
     );
   }
 
   const displayName = userProfile?.fullName || user?.name || 'User';
   const displayTitle = userProfile?.title || 'Employee';
   const attendanceRate = dashboardStats?.statistics?.attendancePercentage || 0;
-  const leaveBalance = dashboardStats?.statistics?.leaveBalance || 12;
+  const totalLeaveBalance = leaveBalances.reduce((sum, balance) => sum + balance.remainingDays, 0) || dashboardStats?.statistics?.leaveBalance || 0;
   const targetRate = 95;
   const difference = attendanceRate - targetRate;
 
   return (
-    <PrivateRoute>
-      <div className="min-h-screen bg-gray-50 flex">
-        {/* Left Sidebar */}
-        <div className="w-64 bg-white shadow-lg">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-gray-800">Attendify</span>
-            </div>
+    <EmployeeLayout>
+      {/* Top Header */}
+      <header className="bg-white shadow-sm border-b border-gray-200 px-8 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-gray-800">
+              Welcome back, {displayName.split(' ')[0]}! 👋
+            </h2>
           </div>
-          
-          <nav className="p-4 space-y-2">
-            <Link 
-              href="/dashboard" 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                pathname === '/dashboard' 
-                  ? 'bg-purple-50 text-purple-600 font-semibold' 
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <LayoutDashboard className="w-5 h-5" />
-              Dashboard
-            </Link>
-            <Link 
-              href="/history" 
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Calendar className="w-5 h-5" />
-              My Attendance
-            </Link>
-            <Link 
-              href="/leave" 
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Plane className="w-5 h-5" />
-              Leave Request
-            </Link>
-          </nav>
-
-          {/* Shift Status */}
-          <div className="p-4 mt-auto">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm font-semibold text-gray-700">Shift Status</span>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 text-gray-600">
+              <Clock className="w-5 h-5" />
+              <span className="text-sm font-medium">{currentTime}</span>
+            </div>
+            <button className="text-gray-600 hover:text-gray-800">
+              <Bell className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-sm font-semibold text-gray-800">{displayName}</p>
+                <p className="text-xs text-gray-500">{displayTitle}</p>
               </div>
-              <p className="text-xs text-gray-600">9:00 AM - 6:00 PM</p>
+              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200">
+                {userProfile?.profilePhoto ? (
+                  <img 
+                    src={`http://192.168.1.29:5000${userProfile.profilePhoto}`} 
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-indigo-100 flex items-center justify-center">
+                    <User className="w-6 h-6 text-indigo-600" />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
+      </header>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col">
-          {/* Top Header */}
-          <header className="bg-white shadow-sm border-b border-gray-200 px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <h2 className="text-lg font-semibold text-gray-800">
-                  Welcome back, {displayName.split(' ')[0]}! 👋
-                </h2>
-              </div>
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Clock className="w-5 h-5" />
-                  <span className="text-sm font-medium">{currentTime}</span>
-                </div>
-                <button className="text-gray-600 hover:text-gray-800">
-                  <Bell className="w-5 h-5" />
-                </button>
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setShowUserDropdown(!showUserDropdown)}
-                    className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-                  >
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-800">{displayName}</p>
-                      <p className="text-xs text-gray-500">{displayTitle}</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 cursor-pointer">
-                      {userProfile?.profilePhoto ? (
-                        <img 
-                          src={`http://localhost:5000${userProfile.profilePhoto}`} 
-                          alt={displayName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-indigo-100 flex items-center justify-center">
-                          <User className="w-6 h-6 text-indigo-600" />
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                  
-                  {/* User Dropdown Menu */}
-                  {showUserDropdown && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
-                      <div className="px-4 py-3 border-b border-gray-200">
-                        <p className="text-sm font-semibold text-gray-900">{displayName}</p>
-                        <p className="text-xs text-gray-500">{userProfile?.email || user?.email}</p>
-                      </div>
-                      <Link
-                        href="/profile"
-                        onClick={() => setShowUserDropdown(false)}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                      >
-                        <User size={18} className="text-indigo-600" />
-                        Profile
-                      </Link>
-                      <Link
-                        href="/history"
-                        onClick={() => setShowUserDropdown(false)}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                      >
-                        <History size={18} className="text-indigo-600" />
-                        History
-                      </Link>
-                      <button
-                        onClick={() => {
-                          setShowUserDropdown(false);
-                          setShowChangePasswordModal(true);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                      >
-                        <Settings size={18} className="text-indigo-600" />
-                        Change Password
-                      </button>
-                      <div className="border-t border-gray-200 my-1"></div>
-                      <button
-                        onClick={() => { 
-                          setShowUserDropdown(false);
-                          logout(); 
-                          router.push('/auth'); 
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <LogOut size={18} />
-                        Logout
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </header>
-
-          {/* Main Content Area */}
-          <main className="flex-1 p-6 overflow-y-auto">
+      {/* Main Content Area */}
+      <main className="flex-1 p-6 overflow-y-auto">
             <div className="grid grid-cols-12 gap-6">
               {/* Left Column - Main Cards */}
               <div className="col-span-12 lg:col-span-8 space-y-6">
@@ -551,7 +606,10 @@ const Dashboard: React.FC = () => {
                     )}
                     {todayStatus?.checkedIn && !todayStatus?.checkedOut && (
                       <div className="flex gap-2">
-                        <button className="flex-1 py-2 px-4 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-colors flex items-center justify-center gap-2">
+                        <button 
+                          onClick={handleBreakClick}
+                          className="flex-1 py-2 px-4 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-colors flex items-center justify-center gap-2"
+                        >
                           <Coffee className="w-4 h-4" />
                           Break
                         </button>
@@ -563,6 +621,62 @@ const Dashboard: React.FC = () => {
                           <LogOutIcon className="w-4 h-4" />
                           Check Out
                         </button>
+                      </div>
+                    )}
+                    
+                    {/* Break Status */}
+                    {todayStatus?.checkedIn && !todayStatus?.checkedOut && todayStatus?.attendance && (
+                      <div className="mt-4 pt-4 border-t border-purple-400/30">
+                        <div className="text-xs font-semibold text-purple-100 mb-2">Today's Breaks</div>
+                        <div className="space-y-2">
+                          {(['break1', 'lunch', 'break2'] as const).map((breakType) => {
+                            const status = getBreakStatus(breakType);
+                            const duration = getBreakDuration(breakType);
+                            const breakNames: { [key: string]: string } = {
+                              break1: 'Break 1',
+                              lunch: 'Lunch',
+                              break2: 'Break 2'
+                            };
+                            const breakIcons: { [key: string]: any } = {
+                              break1: Coffee,
+                              lunch: UtensilsCrossed,
+                              break2: Coffee
+                            };
+                            const Icon = breakIcons[breakType];
+                            
+                            if (status === 'not-started') {
+                              return (
+                                <div key={breakType} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2 text-purple-200">
+                                    <Icon className="w-3 h-3" />
+                                    <span>{breakNames[breakType]}</span>
+                                  </div>
+                                  <span className="text-purple-300">Not started</span>
+                                </div>
+                              );
+                            } else if (status === 'active') {
+                              return (
+                                <div key={breakType} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2 text-white font-semibold">
+                                    <Icon className="w-3 h-3" />
+                                    <span>{breakNames[breakType]}</span>
+                                  </div>
+                                  <span className="text-yellow-300 font-semibold">Active ({duration})</span>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div key={breakType} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2 text-purple-200">
+                                    <Icon className="w-3 h-3" />
+                                    <span>{breakNames[breakType]}</span>
+                                  </div>
+                                  <span className="text-green-300">Completed ({duration})</span>
+                                </div>
+                              );
+                            }
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -595,17 +709,19 @@ const Dashboard: React.FC = () => {
                       <Briefcase className="w-5 h-5 text-orange-500" />
                     </div>
                     <div className="text-3xl font-bold text-gray-800 mb-4">
-                      <span className="font-bold">{leaveBalance}</span>
-                      <span className="text-gray-400 font-normal"> / 24 Days</span>
+                      <span className="font-bold">{totalLeaveBalance}</span>
+                      <span className="text-gray-400 font-normal text-lg"> Days</span>
                     </div>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">8 Sick</span>
+                    {leaveBalances.length > 0 && (
+                      <div className="space-y-2 text-sm">
+                        {leaveBalances.slice(0, 3).map((balance, index) => (
+                          <div key={index} className="flex justify-between">
+                            <span className="text-gray-600 capitalize">{balance.leaveType}</span>
+                            <span className="text-gray-800 font-medium">{balance.remainingDays}</span>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">4 Casual</span>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 
@@ -632,41 +748,43 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 {/* Today's Timeline Card */}
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                  <h3 className="text-lg font-bold text-gray-800 mb-6">Today's Timeline</h3>
-                  <div className="space-y-4">
-                    {getTodayTimeline().map((event, index) => (
-                      <div key={index} className="flex items-start gap-4">
-                        <div className="flex flex-col items-center">
-                          <div className={`w-3 h-3 rounded-full ${
-                            event.color === 'green' ? 'bg-green-500' :
-                            event.color === 'yellow' ? 'bg-yellow-500' :
-                            event.color === 'blue' ? 'bg-blue-500' :
-                            'bg-gray-300'
-                          }`}></div>
-                          {index < getTodayTimeline().length - 1 && (
-                            <div className="w-0.5 h-12 bg-gray-200 mt-1"></div>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-semibold text-gray-800">{event.time}</span>
-                            <span className={`text-xs px-2 py-1 rounded ${
-                              event.color === 'green' ? 'bg-green-100 text-green-700' :
-                              event.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
-                              event.color === 'blue' ? 'bg-blue-100 text-blue-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {event.status || event.location}
-                            </span>
+                {getTodayTimeline().length > 0 && (
+                  <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-6">Today's Timeline</h3>
+                    <div className="space-y-4">
+                      {getTodayTimeline().map((event, index) => (
+                        <div key={index} className="flex items-start gap-4">
+                          <div className="flex flex-col items-center">
+                            <div className={`w-3 h-3 rounded-full ${
+                              event.color === 'green' ? 'bg-green-500' :
+                              event.color === 'yellow' ? 'bg-yellow-500' :
+                              event.color === 'blue' ? 'bg-blue-500' :
+                              'bg-gray-300'
+                            }`}></div>
+                            {index < getTodayTimeline().length - 1 && (
+                              <div className="w-0.5 h-12 bg-gray-200 mt-1"></div>
+                            )}
                           </div>
-                          <p className="text-sm text-gray-600">{event.title}</p>
-                          <p className="text-xs text-gray-500 mt-1">{event.location}</p>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-semibold text-gray-800">{event.time}</span>
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                event.color === 'green' ? 'bg-green-100 text-green-700' :
+                                event.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
+                                event.color === 'blue' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {event.status || event.location}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">{event.title}</p>
+                            <p className="text-xs text-gray-500 mt-1">{event.location}</p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Right Column - Sidebar */}
@@ -717,42 +835,108 @@ const Dashboard: React.FC = () => {
                     </table>
                   </div>
                 </div>
-
-                {/* Upcoming Holidays */}
-                <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-lg p-6 text-white">
-                  <h3 className="text-lg font-bold mb-4">Upcoming Holidays</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="px-3 py-1 bg-orange-500 rounded text-xs font-semibold">OCT 31</div>
-                      <div className="flex-1">
-                        <p className="font-semibold">Halloween</p>
-                        <p className="text-xs text-indigo-200">Optional Holiday</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="px-3 py-1 bg-blue-500 rounded text-xs font-semibold">NOV 24</div>
-                      <div className="flex-1">
-                        <p className="font-semibold">Thanksgiving</p>
-                        <p className="text-xs text-indigo-200">Public Holiday</p>
-                      </div>
-                    </div>
-                  </div>
-                  <button className="mt-4 w-full py-2 px-4 bg-white text-indigo-600 rounded-lg font-semibold hover:bg-indigo-50 transition-colors">
-                    View Calendar
-                  </button>
-                </div>
               </div>
             </div>
           </main>
-        </div>
-      </div>
       
       {/* Change Password Modal */}
       <ChangePasswordModal
         isOpen={showChangePasswordModal}
         onClose={() => setShowChangePasswordModal(false)}
       />
-    </PrivateRoute>
+
+      {/* Face Capture Modal */}
+      {showFaceCapture && (
+        <FaceCapture
+          isOpen={showFaceCapture}
+          onFaceCaptured={handleFaceCaptured}
+          onClose={handleFaceCaptureClose}
+        />
+      )}
+
+      {/* Break Modal */}
+      {showBreakModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Break Management</h2>
+              <button
+                onClick={() => setShowBreakModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {(['break1', 'lunch', 'break2'] as const).map((breakType) => {
+                const status = getBreakStatus(breakType);
+                const duration = getBreakDuration(breakType);
+                const breakNames: { [key: string]: string } = {
+                  break1: 'Break 1',
+                  lunch: 'Lunch Break',
+                  break2: 'Break 2'
+                };
+                const breakIcons: { [key: string]: any } = {
+                  break1: Coffee,
+                  lunch: UtensilsCrossed,
+                  break2: Coffee
+                };
+                const Icon = breakIcons[breakType];
+                
+                return (
+                  <div key={breakType} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center">
+                          <Icon className="w-5 h-5 text-teal-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{breakNames[breakType]}</h3>
+                          {duration && (
+                            <p className="text-xs text-gray-500">Duration: {duration}</p>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        status === 'not-started' ? 'bg-gray-100 text-gray-600' :
+                        status === 'active' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {status === 'not-started' ? 'Not Started' :
+                         status === 'active' ? 'Active' :
+                         'Completed'}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      {status === 'not-started' ? (
+                        <button
+                          onClick={() => handleStartBreak(breakType)}
+                          className="flex-1 py-2 px-4 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition-colors"
+                        >
+                          Start {breakNames[breakType]}
+                        </button>
+                      ) : status === 'active' ? (
+                        <button
+                          onClick={() => handleEndBreak(breakType)}
+                          className="flex-1 py-2 px-4 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors"
+                        >
+                          End {breakNames[breakType]}
+                        </button>
+                      ) : (
+                        <div className="flex-1 py-2 px-4 bg-gray-100 text-gray-500 rounded-lg font-semibold text-center">
+                          Completed
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </EmployeeLayout>
   );
 };
 

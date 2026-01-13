@@ -20,6 +20,11 @@ interface LeaveEmployee {
     email: string;
     employeeId: string;
     profilePhoto?: string;
+    department?: {
+      id: number;
+      name: string;
+      code: string;
+    };
   };
   leaveType: string;
   startDate: string;
@@ -33,8 +38,10 @@ const AdminLeaveManagementPage: React.FC = () => {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [employees, setEmployees] = useState<LeaveEmployee[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<LeaveEmployee[]>([]);
   const [allEmployees, setAllEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'approved' | 'pending'>('pending');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
@@ -45,6 +52,10 @@ const AdminLeaveManagementPage: React.FC = () => {
   const [showLeaveDropdown, setShowLeaveDropdown] = useState(true);
   const pathname = usePathname();
   const leaveDropdownRef = useRef<HTMLDivElement>(null);
+  const [leaveDateFilter, setLeaveDateFilter] = useState({
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0]
+  });
   const [addLeaveForm, setAddLeaveForm] = useState({
     userId: '',
     leaveType: '',
@@ -61,8 +72,19 @@ const AdminLeaveManagementPage: React.FC = () => {
       router.push('/dashboard');
       return;
     }
-    fetchEmployeesOnLeave();
-    fetchAllEmployees();
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchEmployeesOnLeave(),
+          fetchPendingRequests(),
+          fetchAllEmployees()
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, [user, pagination.page]);
 
   useEffect(() => {
@@ -99,18 +121,37 @@ const AdminLeaveManagementPage: React.FC = () => {
   }, [addLeaveForm.startDate, addLeaveForm.endDate]);
 
   const fetchEmployeesOnLeave = async () => {
-    setLoading(true);
     try {
-      const response = await axiosInstance.get('/leave/admin/employees-on-leave', {
-        params: { page: pagination.page, limit: pagination.limit }
+      const response = await axiosInstance.get('/leave/all', {
+        params: { 
+          status: 'approved',
+          limit: 1000
+        }
       });
-      setEmployees(response.data.employees || []);
-      setPagination(prev => ({ ...prev, total: response.data.total || response.data.employees?.length || 0 }));
+      // Backend returns leaveRequests array (as seen in dashboard)
+      const allLeaves = response.data.leaveRequests || response.data.leaves || [];
+      // Store all approved leaves (filtering will be done in getFilteredData)
+      setEmployees(allLeaves);
+      setPagination(prev => ({ ...prev, total: allLeaves.length || 0 }));
     } catch (error: any) {
       console.error('Error fetching employees on leave:', error);
       toast.error(error.response?.data?.message || 'Failed to fetch employees on leave');
-    } finally {
-      setLoading(false);
+      setEmployees([]);
+    }
+  };
+
+  const fetchPendingRequests = async () => {
+    try {
+      const response = await axiosInstance.get('/leave/all', {
+        params: { status: 'pending', limit: 1000 }
+      });
+      // Backend returns leaveRequests array (as seen in dashboard)
+      const pendingLeaves = response.data.leaveRequests || response.data.leaves || [];
+      setPendingRequests(pendingLeaves);
+    } catch (error: any) {
+      console.error('Error fetching pending requests:', error);
+      toast.error(error.response?.data?.message || 'Failed to fetch pending requests');
+      setPendingRequests([]);
     }
   };
 
@@ -142,7 +183,9 @@ const AdminLeaveManagementPage: React.FC = () => {
       setShowAddModal(false);
       setAddLeaveForm({ userId: '', leaveType: '', startDate: '', endDate: '', reason: '', status: 'approved' });
       setCalculatedDays(0);
-      fetchEmployeesOnLeave();
+      setLoading(true);
+      await Promise.all([fetchEmployeesOnLeave(), fetchPendingRequests()]);
+      setLoading(false);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to add leave');
     } finally {
@@ -192,13 +235,19 @@ const AdminLeaveManagementPage: React.FC = () => {
 
     try {
       const response = await axiosInstance.post('/leave/admin/bulk-action', {
-        leaveIds: selectedLeaves,
+        requestIds: selectedLeaves,
         action,
         rejectionReason: action === 'reject' ? 'Bulk rejected by admin' : undefined
       });
-      toast.success(`${action === 'approve' ? 'Approved' : 'Rejected'} ${response.data.results[action === 'approve' ? 'approved' : 'rejected'].length} leave(s)`);
+      const successfulResults = response.data.results.filter((r: any) => r.success);
+      toast.success(`${action === 'approve' ? 'Approved' : 'Rejected'} ${successfulResults.length} leave(s)`);
       setSelectedLeaves([]);
-      fetchEmployeesOnLeave();
+      setLoading(true);
+      try {
+        await Promise.all([fetchEmployeesOnLeave(), fetchPendingRequests()]);
+      } finally {
+        setLoading(false);
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || `Failed to ${action} leaves`);
     }
@@ -221,7 +270,7 @@ const AdminLeaveManagementPage: React.FC = () => {
     const colors: { [key: string]: string } = {
       annual: 'bg-blue-100 text-blue-800',
       sick: 'bg-red-100 text-red-800',
-      personal: 'bg-purple-100 text-purple-800',
+      personal: 'bg-teal-100 text-teal-800',
       maternity: 'bg-pink-100 text-pink-800',
       casual: 'bg-yellow-100 text-yellow-800'
     };
@@ -231,6 +280,36 @@ const AdminLeaveManagementPage: React.FC = () => {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
+
+  // Get filtered data based on active tab
+  const getFilteredData = () => {
+    let currentData = activeTab === 'pending' ? pendingRequests : employees;
+    
+    // Apply date filter for "Employees on Leave" tab
+    if (activeTab === 'approved' && leaveDateFilter.startDate && leaveDateFilter.endDate) {
+      const filterStart = new Date(leaveDateFilter.startDate);
+      const filterEnd = new Date(leaveDateFilter.endDate);
+      
+      currentData = currentData.filter((leave: any) => {
+        const leaveStart = new Date(leave.startDate);
+        const leaveEnd = new Date(leave.endDate);
+        
+        // Check if leave period overlaps with filter date range
+        // Leave overlaps if: leaveStart <= filterEnd AND leaveEnd >= filterStart
+        return leaveStart <= filterEnd && leaveEnd >= filterStart;
+      });
+    }
+    
+    // Apply search query filter
+    return currentData.filter(emp => 
+      !searchQuery || 
+      emp.employee?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.employee?.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.employee?.employeeId?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  };
+
+  const filteredData = getFilteredData();
 
   const calculateDays = (start: string, end: string) => {
     const startDate = new Date(start);
@@ -244,24 +323,24 @@ const AdminLeaveManagementPage: React.FC = () => {
     <PrivateRoute>
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         {/* Sidebar - Reusing from admin dashboard */}
-        <div className="w-64 bg-purple-900 flex flex-col">
-          <div className="p-6 border-b border-purple-800">
+        <div className="w-64 bg-gradient-to-br from-teal-600 to-emerald-600 flex flex-col">
+          <div className="p-6 border-b border-teal-500">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-purple-900" />
+                <Calendar className="w-6 h-6 text-teal-900" />
               </div>
               <div>
-                <div className="text-white font-bold text-lg">LeaveFlow</div>
-                <div className="text-purple-300 text-xs">Admin Portal</div>
+                <div className="text-white font-bold text-lg">TimeTrack</div>
+                <div className="text-teal-100 text-xs">Admin Portal</div>
               </div>
             </div>
           </div>
           <nav className="flex-1 p-4 space-y-1">
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <Home className="w-5 h-5" />
               <span>Dashboard</span>
             </Link>
-            <Link href="/users" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+            <Link href="/users" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <Users className="w-5 h-5" />
               <span>Employees</span>
             </Link>
@@ -270,7 +349,7 @@ const AdminLeaveManagementPage: React.FC = () => {
             <div className="relative" ref={leaveDropdownRef}>
               <button
                 onClick={() => setShowLeaveDropdown(!showLeaveDropdown)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-purple-800 text-white transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-teal-500 text-white transition-colors"
               >
                 <Calendar className="w-5 h-5 flex-shrink-0" />
                 <span className="flex-1 whitespace-nowrap">Leave Management</span>
@@ -278,10 +357,10 @@ const AdminLeaveManagementPage: React.FC = () => {
               </button>
               
               {showLeaveDropdown && (
-                <div className="mt-2 ml-2 pl-2 border-l-2 border-purple-700 space-y-1">
+                <div className="mt-2 ml-2 pl-2 border-l-2 border-teal-400 space-y-1">
                   <Link
                     href="/admin/leave"
-                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-purple-800 text-white"
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-teal-500 text-white"
                     onClick={() => setShowLeaveDropdown(false)}
                   >
                     <FileText className="w-4 h-4" />
@@ -289,7 +368,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                   </Link>
                   <Link
                     href="/admin/leave-balance"
-                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors"
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors"
                     onClick={() => setShowLeaveDropdown(false)}
                   >
                     <TrendingUp className="w-4 h-4" />
@@ -299,23 +378,23 @@ const AdminLeaveManagementPage: React.FC = () => {
               )}
             </div>
 
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <BarChart3 className="w-5 h-5" />
               <span>Reports</span>
             </Link>
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <Building2 className="w-5 h-5" />
               <span>Departments</span>
             </Link>
           </nav>
 
           {/* Settings Section */}
-          <div className="p-4 border-t border-purple-800 space-y-1">
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+          <div className="p-4 border-t border-teal-400 space-y-1">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <Settings className="w-5 h-5" />
               <span>Preferences</span>
             </Link>
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors relative">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors relative">
               <Bell className="w-5 h-5" />
               <span>Notifications</span>
               <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">3</span>
@@ -323,19 +402,19 @@ const AdminLeaveManagementPage: React.FC = () => {
           </div>
 
           {/* User Profile */}
-          <div className="p-4 border-t border-purple-800 relative">
+          <div className="p-4 border-t border-teal-400 relative">
             <button
               onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-purple-800 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-teal-500 transition-colors"
             >
-              <div className="w-10 h-10 rounded-full bg-purple-800 flex items-center justify-center">
-                <Users className="w-5 h-5 text-purple-200" />
+              <div className="w-10 h-10 rounded-full bg-teal-500 flex items-center justify-center">
+                <Users className="w-5 h-5 text-teal-100" />
               </div>
               <div className="flex-1 text-left">
                 <div className="text-white font-medium text-sm">{user?.name || 'Admin'}</div>
-                <div className="text-purple-300 text-xs">Administrator</div>
+                <div className="text-teal-100 text-xs">Administrator</div>
               </div>
-              <ChevronDown className={`w-4 h-4 text-purple-300 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-teal-100 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
             </button>
             
             {/* Profile Dropdown */}
@@ -389,7 +468,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold"
+                  className="flex items-center gap-2 px-6 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-400 transition-colors font-semibold"
                 >
                   <Plus className="w-5 h-5" />
                   Add Leave
@@ -400,6 +479,101 @@ const AdminLeaveManagementPage: React.FC = () => {
 
           {/* Content */}
           <div className="p-8">
+            {/* Tabs */}
+            <div className="bg-white rounded-lg border border-gray-200 p-1 mb-6 flex gap-2">
+              <button
+                onClick={() => setActiveTab('pending')}
+                className={`flex-1 px-4 py-2 rounded-lg font-semibold transition-all ${
+                  activeTab === 'pending'
+                    ? 'bg-teal-500 text-white'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Pending Requests {pendingRequests.length > 0 && `(${pendingRequests.length})`}
+              </button>
+              <button
+                onClick={() => setActiveTab('approved')}
+                className={`flex-1 px-4 py-2 rounded-lg font-semibold transition-all ${
+                  activeTab === 'approved'
+                    ? 'bg-teal-500 text-white'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Employees on Leave
+              </button>
+            </div>
+
+            {/* Date Filter for Employees on Leave */}
+            {activeTab === 'approved' && (
+              <div className="mb-6 p-4 bg-teal-50 rounded-lg border border-teal-200">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className="text-sm font-medium text-gray-700">Filter by Date Range:</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={leaveDateFilter.startDate}
+                      onChange={(e) => setLeaveDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    />
+                    <span className="text-gray-500">to</span>
+                    <input
+                      type="date"
+                      value={leaveDateFilter.endDate}
+                      onChange={(e) => setLeaveDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      setLeaveDateFilter({ startDate: today, endDate: today });
+                    }}
+                    className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const startOfWeek = new Date(today);
+                      startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
+                      const endOfWeek = new Date(today);
+                      endOfWeek.setDate(today.getDate() + (6 - today.getDay())); // Saturday
+                      setLeaveDateFilter({
+                        startDate: startOfWeek.toISOString().split('T')[0],
+                        endDate: endOfWeek.toISOString().split('T')[0]
+                      });
+                    }}
+                    className="px-4 py-2 text-sm bg-white text-teal-600 border border-teal-600 rounded-lg hover:bg-teal-50 transition-colors"
+                  >
+                    This Week
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                      setLeaveDateFilter({
+                        startDate: startOfMonth.toISOString().split('T')[0],
+                        endDate: endOfMonth.toISOString().split('T')[0]
+                      });
+                    }}
+                    className="px-4 py-2 text-sm bg-white text-teal-600 border border-teal-600 rounded-lg hover:bg-teal-50 transition-colors"
+                  >
+                    This Month
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLeaveDateFilter({ startDate: '', endDate: '' });
+                    }}
+                    className="px-4 py-2 text-sm bg-white text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Show All
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Filters */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
               <div className="flex items-center gap-4">
@@ -410,7 +584,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                     placeholder="Search employees..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
                 {selectedLeaves.length > 0 && (
@@ -439,18 +613,20 @@ const AdminLeaveManagementPage: React.FC = () => {
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">
-                        <input
-                          type="checkbox"
-                          checked={selectedLeaves.length === employees.length && employees.length > 0}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedLeaves(employees.map(e => e.id));
-                            } else {
-                              setSelectedLeaves([]);
-                            }
-                          }}
-                          className="rounded border-gray-300"
-                        />
+                        {activeTab === 'pending' && (
+                          <input
+                            type="checkbox"
+                            checked={selectedLeaves.length === pendingRequests.length && pendingRequests.length > 0}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedLeaves(pendingRequests.map(e => e.id));
+                              } else {
+                                setSelectedLeaves([]);
+                              }
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                        )}
                       </th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">EMPLOYEE</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">DEPARTMENT</th>
@@ -466,45 +642,45 @@ const AdminLeaveManagementPage: React.FC = () => {
                     {loading ? (
                       <tr>
                         <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
-                          Loading...
+                          <div className="flex items-center justify-center">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mr-2"></div>
+                            Loading...
+                          </div>
                         </td>
                       </tr>
-                    ) : employees.length === 0 ? (
+                    ) : filteredData.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
-                          No employees currently on leave
+                          {activeTab === 'pending' 
+                            ? 'No pending leave requests' 
+                            : 'No employees currently on leave'}
                         </td>
                       </tr>
                     ) : (
-                      employees
-                        .filter(emp => 
-                          !searchQuery || 
-                          emp.employee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          emp.employee.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          emp.employee.employeeId.toLowerCase().includes(searchQuery.toLowerCase())
-                        )
-                        .map((employee) => (
+                      filteredData.map((employee) => (
                           <tr key={employee.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4">
-                              <input
-                                type="checkbox"
-                                checked={selectedLeaves.includes(employee.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedLeaves([...selectedLeaves, employee.id]);
-                                  } else {
-                                    setSelectedLeaves(selectedLeaves.filter(id => id !== employee.id));
-                                  }
-                                }}
-                                className="rounded border-gray-300"
-                              />
-                            </td>
+                        <td className="px-6 py-4">
+                          {activeTab === 'pending' && (
+                            <input
+                              type="checkbox"
+                              checked={selectedLeaves.includes(employee.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedLeaves([...selectedLeaves, employee.id]);
+                                } else {
+                                  setSelectedLeaves(selectedLeaves.filter(id => id !== employee.id));
+                                }
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                          )}
+                        </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
                                   {employee.employee.profilePhoto ? (
                                     <img
-                                      src={`http://localhost:5000${employee.employee.profilePhoto}`}
+                                      src={`http://192.168.1.29:5000${employee.employee.profilePhoto}`}
                                       alt={employee.employee.name}
                                       className="w-full h-full object-cover"
                                     />
@@ -518,7 +694,9 @@ const AdminLeaveManagementPage: React.FC = () => {
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-700">Engineering</td>
+                            <td className="px-6 py-4 text-sm text-gray-700">
+                              {employee.employee.department?.name || 'N/A'}
+                            </td>
                             <td className="px-6 py-4">
                               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getLeaveTypeColor(employee.leaveType)}`}>
                                 {getLeaveTypeLabel(employee.leaveType)}
@@ -528,42 +706,111 @@ const AdminLeaveManagementPage: React.FC = () => {
                             <td className="px-6 py-4 text-sm text-gray-700">{formatDate(employee.endDate)}</td>
                             <td className="px-6 py-4 text-sm text-gray-700">{employee.totalDays} days</td>
                             <td className="px-6 py-4">
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                Active
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+                                employee.status === 'pending' 
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : employee.status === 'approved'
+                                  ? 'bg-green-100 text-green-800'
+                                  : employee.status === 'rejected'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                <div className={`w-2 h-2 rounded-full ${
+                                  employee.status === 'pending' 
+                                    ? 'bg-orange-500'
+                                    : employee.status === 'approved'
+                                    ? 'bg-green-500'
+                                    : employee.status === 'rejected'
+                                    ? 'bg-red-500'
+                                    : 'bg-gray-500'
+                                }`}></div>
+                                {employee.status ? employee.status.charAt(0).toUpperCase() + employee.status.slice(1) : 'Active'}
                               </span>
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => {
-                                    setSelectedLeave(employee);
-                                    setShowEditModal(true);
-                                  }}
-                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                  title="Edit"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    if (confirm('Are you sure you want to cancel this leave?')) {
-                                      try {
-                                        await axiosInstance.put(`/leave/admin/cancel/${employee.id}`, {
-                                          reason: 'Cancelled by admin'
-                                        });
-                                        toast.success('Leave cancelled successfully');
-                                        fetchEmployeesOnLeave();
-                                      } catch (error: any) {
-                                        toast.error(error.response?.data?.message || 'Failed to cancel leave');
-                                      }
-                                    }
-                                  }}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Cancel"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
+                                {activeTab === 'pending' && employee.status === 'pending' && (
+                                  <>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          setLoading(true);
+                                          await axiosInstance.post(`/leave/admin/bulk-action`, {
+                                            requestIds: [employee.id],
+                                            action: 'approve'
+                                          });
+                                          toast.success('Leave approved');
+                                          await Promise.all([fetchPendingRequests(), fetchEmployeesOnLeave()]);
+                                        } catch (error: any) {
+                                          toast.error(error.response?.data?.message || 'Failed to approve leave');
+                                        } finally {
+                                          setLoading(false);
+                                        }
+                                      }}
+                                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                      title="Approve"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          setLoading(true);
+                                          await axiosInstance.post(`/leave/admin/bulk-action`, {
+                                            requestIds: [employee.id],
+                                            action: 'reject'
+                                          });
+                                          toast.success('Leave rejected');
+                                          await Promise.all([fetchPendingRequests(), fetchEmployeesOnLeave()]);
+                                        } catch (error: any) {
+                                          toast.error(error.response?.data?.message || 'Failed to reject leave');
+                                        } finally {
+                                          setLoading(false);
+                                        }
+                                      }}
+                                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                      title="Reject"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
+                                {activeTab === 'approved' && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedLeave(employee);
+                                        setShowEditModal(true);
+                                      }}
+                                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                      title="Edit"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        if (confirm('Are you sure you want to cancel this leave?')) {
+                                          try {
+                                            setLoading(true);
+                                            await axiosInstance.put(`/leave/admin/cancel/${employee.id}`, {
+                                              reason: 'Cancelled by admin'
+                                            });
+                                            toast.success('Leave cancelled successfully');
+                                            await Promise.all([fetchEmployeesOnLeave(), fetchPendingRequests()]);
+                                          } catch (error: any) {
+                                            toast.error(error.response?.data?.message || 'Failed to cancel leave');
+                                          } finally {
+                                            setLoading(false);
+                                          }
+                                        }
+                                      }}
+                                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                      title="Cancel"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -587,7 +834,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
-                    <span className="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold">{pagination.page}</span>
+                    <span className="px-4 py-2 bg-teal-500 text-white rounded-lg font-semibold">{pagination.page}</span>
                     <button
                       onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                       disabled={pagination.page * pagination.limit >= pagination.total}
@@ -628,7 +875,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                   <select
                     value={addLeaveForm.userId}
                     onChange={(e) => setAddLeaveForm({ ...addLeaveForm, userId: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                     required
                   >
                     <option value="">Select an employee</option>
@@ -648,7 +895,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                     <select
                       value={addLeaveForm.leaveType}
                       onChange={(e) => setAddLeaveForm({ ...addLeaveForm, leaveType: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                       required
                     >
                       <option value="">Select leave type</option>
@@ -669,7 +916,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                     <select
                       value={addLeaveForm.status}
                       onChange={(e) => setAddLeaveForm({ ...addLeaveForm, status: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                       required
                     >
                       <option value="approved">Approved</option>
@@ -687,7 +934,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                       type="date"
                       value={addLeaveForm.startDate}
                       onChange={(e) => setAddLeaveForm({ ...addLeaveForm, startDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                       required
                     />
                   </div>
@@ -701,7 +948,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                       value={addLeaveForm.endDate}
                       onChange={(e) => setAddLeaveForm({ ...addLeaveForm, endDate: e.target.value })}
                       min={addLeaveForm.startDate}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                       required
                     />
                   </div>
@@ -712,7 +959,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                     Total Working Days
                   </label>
                   <div className="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg">
-                    <span className="text-lg font-bold text-purple-600">{calculatedDays}</span>
+                    <span className="text-lg font-bold text-teal-600">{calculatedDays}</span>
                     <span className="text-gray-600 ml-2">days</span>
                   </div>
                 </div>
@@ -725,7 +972,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                     value={addLeaveForm.reason}
                     onChange={(e) => setAddLeaveForm({ ...addLeaveForm, reason: e.target.value })}
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                     placeholder="Enter reason for leave..."
                     required
                     minLength={10}
@@ -750,7 +997,7 @@ const AdminLeaveManagementPage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={submitting || calculatedDays === 0 || addLeaveForm.reason.length < 10}
-                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                    className="px-6 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
                   >
                     {submitting ? 'Adding...' : 'Add Leave'}
                   </button>

@@ -49,3 +49,21 @@ code {
   animation-delay: 4s;
 }
 
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animated-gradient {
+  background: linear-gradient(-45deg, #2dd4bf, #14b8a6, #0d9488, #10b981, #2dd4bf);
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}

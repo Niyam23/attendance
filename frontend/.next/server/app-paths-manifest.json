@@ -1,7 +1,6 @@
 {
-  "/admin/leave-balance/page": "app/admin/leave-balance/page.js",
   "/auth/page": "app/auth/page.js",
   "/onboarding/page": "app/onboarding/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/leave/page": "app/leave/page.js"
+  "/dashboard/admin/page": "app/dashboard/admin/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
 }

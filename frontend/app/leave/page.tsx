@@ -375,7 +375,7 @@ const LeavePage: React.FC = () => {
                       <div className="relative w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0">
                         {member.profilePhoto ? (
                           <img 
-                            src={`http://localhost:5000${member.profilePhoto}`} 
+                            src={`http://192.168.1.29:5000${member.profilePhoto}`} 
                             alt={member.name}
                             className="w-full h-full object-cover"
                           />

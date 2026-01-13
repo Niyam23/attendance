@@ -34,8 +34,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Fetch user on mount if token exists in localStorage
   useEffect(() => {
     const initializeAuth = async () => {
-      if (typeof window !== 'undefined') {
-        const storedToken = localStorage.getItem('token');
+    if (typeof window !== 'undefined') {
+      const storedToken = localStorage.getItem('token');
         
         if (storedToken) {
           // Token exists, fetch user
@@ -109,7 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loginData.otp = otp;
       }
 
-      const response = await axios.post('http://localhost:5000/api/auth/login', loginData);
+      const response = await axios.post('http://192.168.1.29:5000/api/auth/login', loginData);
       const { token: newToken, user: userData } = response.data;
       
       // Store token in localStorage
@@ -156,7 +156,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         registerData.departmentId = parseInt(departmentId);
       }
 
-      const response = await axios.post('http://localhost:5000/api/auth/register', registerData);
+      const response = await axios.post('http://192.168.1.29:5000/api/auth/register', registerData);
       const { token: newToken, user: userData } = response.data;
       
       // Store token in localStorage

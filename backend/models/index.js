@@ -8,6 +8,7 @@ const LeaveRequest = require('./LeaveRequest');
 const LeaveHistory = require('./LeaveHistory');
 const PublicHoliday = require('./PublicHoliday');
 const Department = require('./Department');
+const UserFaceProfile = require('./UserFaceProfile');
 
 // Define associations
 
@@ -51,6 +52,10 @@ PublicHoliday.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
 Department.hasMany(User, { foreignKey: 'departmentId', as: 'employees' });
 User.belongsTo(Department, { foreignKey: 'departmentId', as: 'department' });
 
+// User - UserFaceProfile associations
+User.hasOne(UserFaceProfile, { foreignKey: 'userId', as: 'faceProfile' });
+UserFaceProfile.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
 module.exports = {
   sequelize,
   User,
@@ -61,6 +66,7 @@ module.exports = {
   LeaveRequest,
   LeaveHistory,
   PublicHoliday,
-  Department
+  Department,
+  UserFaceProfile
 };
 

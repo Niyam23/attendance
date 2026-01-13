@@ -273,25 +273,25 @@ const LeaveBalanceManagementPage: React.FC = () => {
     <PrivateRoute>
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 bg-purple-900 flex flex-col">
-          <div className="p-6 border-b border-purple-800">
+        <div className="w-64 bg-gradient-to-br from-teal-600 to-emerald-600 flex flex-col">
+          <div className="p-6 border-b border-teal-500">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-purple-900" />
+                <Calendar className="w-6 h-6 text-teal-600" />
               </div>
               <div>
-                <div className="text-white font-bold text-lg">LeaveFlow</div>
-                <div className="text-purple-300 text-xs">Admin Portal</div>
+                <div className="text-white font-bold text-lg">TimeTrack</div>
+                <div className="text-teal-100 text-xs">Admin Portal</div>
               </div>
             </div>
           </div>
 
           <nav className="flex-1 p-4 space-y-1">
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <Home className="w-5 h-5" />
               <span>Dashboard</span>
             </Link>
-            <Link href="/users" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+            <Link href="/users" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <Users className="w-5 h-5" />
               <span>Employees</span>
             </Link>
@@ -300,7 +300,7 @@ const LeaveBalanceManagementPage: React.FC = () => {
             <div className="relative" ref={leaveDropdownRef}>
               <button
                 onClick={() => setShowLeaveDropdown(!showLeaveDropdown)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-purple-800 text-white transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-teal-500 text-white transition-colors"
               >
                 <Calendar className="w-5 h-5 flex-shrink-0" />
                 <span className="flex-1 whitespace-nowrap">Leave Management</span>
@@ -308,10 +308,10 @@ const LeaveBalanceManagementPage: React.FC = () => {
               </button>
               
               {showLeaveDropdown && (
-                <div className="mt-2 ml-2 pl-2 border-l-2 border-purple-700 space-y-1">
+                <div className="mt-2 ml-2 pl-2 border-l-2 border-teal-400 space-y-1">
                   <Link
                     href="/admin/leave"
-                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors"
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-teal-200 hover:bg-teal-800 hover:text-white transition-colors"
                     onClick={() => setShowLeaveDropdown(false)}
                   >
                     <FileText className="w-4 h-4" />
@@ -319,7 +319,7 @@ const LeaveBalanceManagementPage: React.FC = () => {
                   </Link>
                   <Link
                     href="/admin/leave-balance"
-                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-purple-800 text-white"
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-teal-800 text-white"
                     onClick={() => setShowLeaveDropdown(false)}
                   >
                     <TrendingUp className="w-4 h-4" />
@@ -329,41 +329,41 @@ const LeaveBalanceManagementPage: React.FC = () => {
               )}
             </div>
 
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <BarChart3 className="w-5 h-5" />
               <span>Reports</span>
             </Link>
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <Building2 className="w-5 h-5" />
               <span>Departments</span>
             </Link>
           </nav>
 
-          <div className="p-4 border-t border-purple-800 space-y-1">
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors">
+          <div className="p-4 border-t border-teal-500 space-y-1">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors">
               <Settings className="w-5 h-5" />
               <span>Preferences</span>
             </Link>
-            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors relative">
+            <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-200 hover:bg-teal-800 hover:text-white transition-colors relative">
               <Bell className="w-5 h-5" />
               <span>Notifications</span>
               <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">3</span>
             </Link>
           </div>
 
-          <div className="p-4 border-t border-purple-800 relative">
+          <div className="p-4 border-t border-teal-500 relative">
             <button
               onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-purple-800 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-teal-500 transition-colors"
             >
-              <div className="w-10 h-10 rounded-full bg-purple-800 flex items-center justify-center">
-                <Users className="w-5 h-5 text-purple-200" />
+              <div className="w-10 h-10 rounded-full bg-teal-500 flex items-center justify-center">
+                <Users className="w-5 h-5 text-white" />
               </div>
               <div className="flex-1 text-left">
                 <div className="text-white font-medium text-sm">{user?.name || 'Admin'}</div>
-                <div className="text-purple-300 text-xs">Administrator</div>
+                <div className="text-teal-100 text-xs">Administrator</div>
               </div>
-              <ChevronDown className={`w-4 h-4 text-purple-300 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-teal-100 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
             </button>
             
             {showProfileDropdown && (
@@ -474,7 +474,7 @@ const LeaveBalanceManagementPage: React.FC = () => {
                               <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
                                 {empBal.employee.profilePhoto ? (
                                   <img
-                                    src={`http://localhost:5000${empBal.employee.profilePhoto}`}
+                                    src={`http://192.168.1.29:5000${empBal.employee.profilePhoto}`}
                                     alt={empBal.employee.name}
                                     className="w-full h-full object-cover"
                                   />

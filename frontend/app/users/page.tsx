@@ -313,7 +313,7 @@ const UsersPage: React.FC = () => {
                               <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden">
                                 {employee.profilePhoto ? (
                                   <img 
-                                    src={`http://localhost:5000${employee.profilePhoto}`} 
+                                    src={`http://192.168.1.29:5000${employee.profilePhoto}`} 
                                     alt={employee.name}
                                     className="w-full h-full object-cover"
                                   />

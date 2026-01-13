@@ -55,7 +55,7 @@ const Register: React.FC = () => {
 
     setSendingOtp(true);
     try {
-      const response = await axios.post('http://localhost:5000/api/otp/send', {
+      const response = await axios.post('http://192.168.1.29:5000/api/otp/send', {
         mobileNumber: formData.mobileNumber
       });
       if (response.data.success) {

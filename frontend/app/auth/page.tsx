@@ -274,7 +274,14 @@ const AuthPage = () => {
   };
 
   return (
-    <div className="max-h-screen flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 p-4">
+    <div 
+      className="min-h-screen w-full flex items-center justify-center p-4"
+      style={{
+        background: 'linear-gradient(-45deg, #2dd4bf, #14b8a6, #0d9488, #10b981, #2dd4bf)',
+        backgroundSize: '400% 400%',
+        animation: 'gradient-shift 15s ease infinite'
+      }}
+    >
       <div className="w-full max-w-5xl h-[650px] bg-white rounded-3xl shadow-2xl overflow-hidden relative">
         
         {/* Overlay Panel Container - This slides */}
@@ -337,10 +344,10 @@ const AuthPage = () => {
               <div className="w-8 h-8 bg-teal-500 rounded-lg flex items-center justify-center">
                 <div className="w-4 h-4 border-2 border-white rounded"></div>
               </div>
-              <span className="text-xl font-semibold text-gray-700">Diprella</span>
+              <span className="text-xl font-semibold text-gray-700">TimeTrack</span>
             </div>
 
-            <h1 className="text-2xl font-bold text-teal-600 mb-6">Sign in to Diprella</h1>
+            <h1 className="text-2xl font-bold text-teal-600 mb-6">Sign in to TimeTrack</h1>
 
             {/* Social Login Buttons */}
             {/* <div className="flex gap-4 justify-center mb-4">

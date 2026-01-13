@@ -52,7 +52,7 @@ const AttendanceHistory: React.FC = () => {
         ...(filters.endDate && { endDate: filters.endDate })
       };
 
-      const response = await axios.get('http://localhost:5000/api/attendance/my-attendance', { params });
+      const response = await axios.get('http://192.168.1.29:5000/api/attendance/my-attendance', { params });
       setAttendances(response.data.attendances);
       setPagination({
         ...pagination,

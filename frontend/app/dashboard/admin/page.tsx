@@ -86,13 +86,14 @@ const AdminDashboard: React.FC = () => {
     try {
       setLoading(true);
       
-      // Fetch all employees
-      const usersRes = await axiosInstance.get('/auth/users', { params: { limit: 1000 } });
+      // Fetch data in parallel for better performance
+      const [usersRes, allLeavesRes] = await Promise.all([
+        axiosInstance.get('/auth/users', { params: { limit: 1000 } }),
+        axiosInstance.get('/leave/all').catch(() => ({ data: { leaveRequests: [] } }))
+      ]);
+      
       const allUsers = usersRes.data.users || [];
       const totalEmployees = allUsers.filter((u: any) => u.role === 'employee').length;
-
-      // Fetch all leave requests for stats
-      const allLeavesRes = await axiosInstance.get('/leave/all').catch(() => ({ data: { leaveRequests: [] } }));
       const allLeaves = allLeavesRes.data.leaveRequests || [];
       
       // Calculate pending requests
@@ -251,8 +252,9 @@ const AdminDashboard: React.FC = () => {
     return (
       <PrivateRoute>
         <div className="flex h-screen bg-gray-50">
-          <div className="flex items-center justify-center w-full">
-            <div className="text-lg">Loading...</div>
+          <div className="flex flex-col items-center justify-center w-full">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mb-4"></div>
+            <div className="text-lg text-gray-600">Loading dashboard...</div>
           </div>
         </div>
       </PrivateRoute>
@@ -263,17 +265,17 @@ const AdminDashboard: React.FC = () => {
     <PrivateRoute>
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 bg-purple-900 flex flex-col">
+        <div className="w-64 bg-gradient-to-br from-teal-600 to-emerald-600 flex flex-col">
           {/* Logo */}
-          <div className="p-6 border-b border-purple-800">
+          <div className="p-6 border-b border-teal-500">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-purple-900" />
-                <CheckCircle className="w-3 h-3 text-green-500 -ml-4 mt-3" />
+                <Calendar className="w-6 h-6 text-teal-600" />
+                <CheckCircle className="w-3 h-3 text-emerald-500 -ml-4 mt-3" />
               </div>
               <div>
-                <div className="text-white font-bold text-lg">LeaveFlow</div>
-                <div className="text-purple-300 text-xs">Admin Portal</div>
+                <div className="text-white font-bold text-lg">TimeTrack</div>
+                <div className="text-teal-100 text-xs">Admin Portal</div>
               </div>
             </div>
           </div>
@@ -284,8 +286,8 @@ const AdminDashboard: React.FC = () => {
               href="/dashboard/admin"
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                 pathname === '/dashboard/admin'
-                  ? 'bg-purple-800 text-white'
-                  : 'text-purple-200 hover:bg-purple-800 hover:text-white'
+                  ? 'bg-teal-500 text-white'
+                  : 'text-teal-100 hover:bg-teal-500 hover:text-white'
               }`}
             >
               <Home className="w-5 h-5" />
@@ -293,7 +295,7 @@ const AdminDashboard: React.FC = () => {
             </Link>
             <Link
               href="/users"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors"
             >
               <Users className="w-5 h-5" />
               <span>Employees</span>
@@ -304,8 +306,8 @@ const AdminDashboard: React.FC = () => {
                 onClick={() => setShowLeaveDropdown(!showLeaveDropdown)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   pathname?.includes('/admin/leave') || pathname?.includes('/leave-balance')
-                    ? 'bg-purple-800 text-white'
-                    : 'text-purple-200 hover:bg-purple-800 hover:text-white'
+                    ? 'bg-teal-500 text-white'
+                    : 'text-teal-100 hover:bg-teal-500 hover:text-white'
                 }`}
               >
                 <Calendar className="w-5 h-5 flex-shrink-0" />
@@ -319,13 +321,13 @@ const AdminDashboard: React.FC = () => {
               </button>
               
               {showLeaveDropdown && (
-                <div className="mt-2 ml-2 pl-2 border-l-2 border-purple-700 space-y-1">
+                <div className="mt-2 ml-2 pl-2 border-l-2 border-teal-400 space-y-1">
                   <Link
                     href="/admin/leave"
                     className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
                       pathname === '/admin/leave'
-                        ? 'bg-purple-800 text-white'
-                        : 'text-purple-200 hover:bg-purple-800 hover:text-white'
+                        ? 'bg-teal-800 text-white'
+                        : 'text-teal-200 hover:bg-teal-800 hover:text-white'
                     }`}
                     onClick={() => setShowLeaveDropdown(false)}
                   >
@@ -336,8 +338,8 @@ const AdminDashboard: React.FC = () => {
                     href="/admin/leave-balance"
                     className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
                       pathname === '/admin/leave-balance'
-                        ? 'bg-purple-800 text-white'
-                        : 'text-purple-200 hover:bg-purple-800 hover:text-white'
+                        ? 'bg-teal-800 text-white'
+                        : 'text-teal-200 hover:bg-teal-800 hover:text-white'
                     }`}
                     onClick={() => setShowLeaveDropdown(false)}
                   >
@@ -349,14 +351,18 @@ const AdminDashboard: React.FC = () => {
             </div>
             <Link
               href="/dashboard/admin"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors"
             >
               <BarChart3 className="w-5 h-5" />
               <span>Reports</span>
             </Link>
             <Link
-              href="/dashboard/admin"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors"
+              href="/admin/departments"
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                pathname === '/admin/departments'
+                  ? 'bg-teal-500 text-white'
+                  : 'text-teal-100 hover:bg-teal-500 hover:text-white'
+              }`}
             >
               <Building2 className="w-5 h-5" />
               <span>Departments</span>
@@ -364,17 +370,17 @@ const AdminDashboard: React.FC = () => {
           </nav>
 
           {/* Settings Section */}
-          <div className="p-4 border-t border-purple-800 space-y-1">
+          <div className="p-4 border-t border-teal-500 space-y-1">
             <Link
               href="/dashboard/admin"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-100 hover:bg-teal-500 hover:text-white transition-colors"
             >
               <Settings className="w-5 h-5" />
               <span>Preferences</span>
             </Link>
             <Link
               href="/dashboard/admin"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-800 hover:text-white transition-colors relative"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-teal-200 hover:bg-teal-800 hover:text-white transition-colors relative"
             >
               <Bell className="w-5 h-5" />
               <span>Notifications</span>
@@ -385,19 +391,19 @@ const AdminDashboard: React.FC = () => {
           </div>
 
           {/* User Profile */}
-          <div className="p-4 border-t border-purple-800 relative">
+          <div className="p-4 border-t border-teal-800 relative">
             <button
               onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-purple-800 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-teal-500 transition-colors"
             >
-              <div className="w-10 h-10 rounded-full bg-purple-800 flex items-center justify-center">
-                <Users className="w-5 h-5 text-purple-200" />
+              <div className="w-10 h-10 rounded-full bg-teal-500 flex items-center justify-center">
+                <Users className="w-5 h-5 text-white" />
               </div>
               <div className="flex-1 text-left">
                 <div className="text-white font-medium text-sm">{user?.name || 'Admin'}</div>
-                <div className="text-purple-300 text-xs">Administrator</div>
+                <div className="text-teal-100 text-xs">Administrator</div>
               </div>
-              <ChevronRight className={`w-4 h-4 text-purple-300 transition-transform ${showProfileDropdown ? 'rotate-90' : ''}`} />
+              <ChevronRight className={`w-4 h-4 text-teal-100 transition-transform ${showProfileDropdown ? 'rotate-90' : ''}`} />
             </button>
             
             {/* Profile Dropdown */}
@@ -452,7 +458,7 @@ const AdminDashboard: React.FC = () => {
                     placeholder="Search employees..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
                 <div className="relative">
@@ -473,7 +479,7 @@ const AdminDashboard: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-2">
-                    <Users className="w-8 h-8 text-blue-600" />
+                    <Users className="w-8 h-8 text-teal-600" />
                     <div className="flex items-center gap-1 text-green-600 text-sm">
                       <ArrowUp className="w-4 h-4" />
                       <span>12%</span>
@@ -509,7 +515,7 @@ const AdminDashboard: React.FC = () => {
 
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-2">
-                    <TrendingUp className="w-8 h-8 text-purple-600" />
+                    <TrendingUp className="w-8 h-8 text-teal-600" />
                     <div className="flex items-center gap-1 text-green-600 text-sm">
                       <ArrowUp className="w-4 h-4" />
                       <span>5%</span>
@@ -547,7 +553,7 @@ const AdminDashboard: React.FC = () => {
 
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-2">
-                    <Percent className="w-8 h-8 text-indigo-600" />
+                    <Percent className="w-8 h-8 text-teal-600" />
                     <div className="flex items-center gap-1 text-green-600 text-sm">
                       <ArrowUp className="w-4 h-4" />
                       <span>3%</span>
@@ -649,7 +655,7 @@ const AdminDashboard: React.FC = () => {
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-gray-900">Recent Leave Requests</h2>
-                    <Link href="/leave" className="text-purple-600 hover:text-purple-700 text-sm font-medium">
+                    <Link href="/leave" className="text-teal-600 hover:text-teal-700 text-sm font-medium">
                       View All
                     </Link>
                   </div>
@@ -659,7 +665,7 @@ const AdminDashboard: React.FC = () => {
                         <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
                           {request.employee.profilePhoto ? (
                             <img 
-                              src={`http://localhost:5000${request.employee.profilePhoto}`} 
+                              src={`http://192.168.1.29:5000${request.employee.profilePhoto}`} 
                               alt={request.employee.name}
                               className="w-full h-full object-cover"
                             />
@@ -695,12 +701,12 @@ const AdminDashboard: React.FC = () => {
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-gray-900">Department Overview</h2>
-                    <button className="text-purple-600 hover:text-purple-700 text-sm font-medium">Filter</button>
+                    <button className="text-teal-600 hover:text-teal-700 text-sm font-medium">Filter</button>
                   </div>
                   <div className="space-y-4">
                     {stats.departmentOverview.map((dept, index) => (
                       <div key={index} className="flex items-center gap-4 pb-4 border-b border-gray-100 last:border-0">
-                        <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-lg">
+                        <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-lg">
                           {dept.icon}
                         </div>
                         <div className="flex-1">

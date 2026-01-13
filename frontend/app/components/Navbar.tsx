@@ -18,7 +18,7 @@ const Navbar: React.FC = () => {
   useEffect(() => {
     // Fetch user profile photo
     if (user?.profilePhoto) {
-      setProfilePhotoUrl(`http://localhost:5000${user.profilePhoto}`);
+      setProfilePhotoUrl(`http://192.168.1.29:5000${user.profilePhoto}`);
     } else {
       setProfilePhotoUrl(null);
     }
@@ -61,25 +61,25 @@ const Navbar: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Calendar className="w-6 h-6 text-indigo-600 mr-2" />
-              <span className="text-xl font-bold text-gray-800">Attendance System</span>
+              <Calendar className="w-6 h-6 text-teal-600 mr-2" />
+              <span className="text-xl font-bold text-gray-800">TimeTrack</span>
             </div>
             <div className="flex items-center space-x-4">
-              <Link href="/dashboard" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-100 transition-colors">
+              <Link href="/dashboard" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-teal-600 hover:bg-gray-100 transition-colors">
                 <Calendar size={20} className="mr-2" />
                 Dashboard
               </Link>
-              <Link href="/history" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-100 transition-colors">
+              <Link href="/history" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-teal-600 hover:bg-gray-100 transition-colors">
                 <History size={20} className="mr-2" />
                 History
               </Link>
               {user?.role === 'admin' && (
                 <>
-                  <Link href="/dashboard/admin" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-100 transition-colors">
+                  <Link href="/dashboard/admin" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-teal-600 hover:bg-gray-100 transition-colors">
                     <Settings size={20} className="mr-2" />
                     Admin
                   </Link>
-                  <Link href="/users" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-100 transition-colors">
+                  <Link href="/users" className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-teal-600 hover:bg-gray-100 transition-colors">
                     <Users size={20} className="mr-2" />
                     Employees
                   </Link>
@@ -90,13 +90,13 @@ const Navbar: React.FC = () => {
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setShowDropdown(!showDropdown)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500"
                 >
-                  <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-indigo-600 flex items-center justify-center bg-indigo-100">
+                  <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-teal-600 flex items-center justify-center bg-teal-50">
                     {profilePhotoUrl ? (
                       <img src={profilePhotoUrl} alt={user?.name} className="w-full h-full object-cover" />
                     ) : (
-                      <User className="w-6 h-6 text-indigo-600" />
+                      <User className="w-6 h-6 text-teal-600" />
                     )}
                   </div>
                   <div className="hidden md:block text-left">
@@ -116,14 +116,14 @@ const Navbar: React.FC = () => {
                       onClick={handleViewProfile}
                       className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
-                      <User size={18} className="text-indigo-600" />
+                      <User size={18} className="text-teal-600" />
                       View Profile
                     </button>
                     <button
                       onClick={handleChangePassword}
                       className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
-                      <Settings size={18} className="text-indigo-600" />
+                      <Settings size={18} className="text-teal-600" />
                       Change Password
                     </button>
                     <div className="border-t border-gray-200 my-1"></div>

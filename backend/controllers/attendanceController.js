@@ -1,9 +1,12 @@
 const { Attendance, User, LeaveRequest, LeaveBalance } = require('../models');
 const { Op } = require('sequelize');
+const { saveBase64Image } = require('../middleware/attendanceUpload');
 
 exports.checkIn = async (req, res) => {
   try {
     const userId = req.user.id;
+    const { faceImage } = req.body; // Base64 image data
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -24,10 +27,22 @@ exports.checkIn = async (req, res) => {
       return res.status(400).json({ message: 'You have already checked in today' });
     }
 
+    // Save face image if provided
+    let checkInPhoto = null;
+    if (faceImage) {
+      try {
+        checkInPhoto = saveBase64Image(faceImage, 'checkin');
+      } catch (imageError) {
+        console.error('Error saving check-in photo:', imageError);
+        // Continue without photo if there's an error
+      }
+    }
+
     const attendance = await Attendance.create({
       userId,
       checkIn: new Date(),
-      status: 'present'
+      status: 'present',
+      checkInPhoto
     });
 
     res.status(201).json({
@@ -43,6 +58,8 @@ exports.checkIn = async (req, res) => {
 exports.checkOut = async (req, res) => {
   try {
     const userId = req.user.id;
+    const { faceImage } = req.body; // Base64 image data
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -67,7 +84,19 @@ exports.checkOut = async (req, res) => {
       return res.status(400).json({ message: 'You have already checked out today' });
     }
 
+    // Save face image if provided
+    let checkOutPhoto = null;
+    if (faceImage) {
+      try {
+        checkOutPhoto = saveBase64Image(faceImage, 'checkout');
+      } catch (imageError) {
+        console.error('Error saving check-out photo:', imageError);
+        // Continue without photo if there's an error
+      }
+    }
+
     attendance.checkOut = new Date();
+    attendance.checkOutPhoto = checkOutPhoto;
     await attendance.save();
 
     res.json({
@@ -76,6 +105,125 @@ exports.checkOut = async (req, res) => {
     });
   } catch (error) {
     console.error('Check-out error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.startBreak = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { breakType } = req.body; // faceImage removed - breaks don't require face verification
+    
+    if (!['break1', 'lunch', 'break2'].includes(breakType)) {
+      return res.status(400).json({ message: 'Invalid break type' });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Find today's attendance
+    const attendance = await Attendance.findOne({
+      where: {
+        userId,
+        checkIn: {
+          [Op.gte]: today,
+          [Op.lt]: tomorrow
+        }
+      }
+    });
+
+    if (!attendance) {
+      return res.status(400).json({ message: 'You have not checked in today' });
+    }
+
+    if (attendance.checkOut) {
+      return res.status(400).json({ message: 'You have already checked out today' });
+    }
+
+    // Check if break is already started
+    const breakStartField = `${breakType}Start`;
+    const breakEndField = `${breakType}End`;
+    
+    if (attendance[breakStartField] && !attendance[breakEndField]) {
+      return res.status(400).json({ message: `${breakType} break already started` });
+    }
+
+    // Start the break
+    attendance[breakStartField] = new Date();
+    await attendance.save();
+
+    res.json({
+      message: `${breakType} break started successfully`,
+      attendance,
+      breakType
+    });
+  } catch (error) {
+    console.error('Start break error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.endBreak = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { breakType } = req.body; // faceImage removed - breaks don't require face verification
+    
+    if (!['break1', 'lunch', 'break2'].includes(breakType)) {
+      return res.status(400).json({ message: 'Invalid break type' });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Find today's attendance
+    const attendance = await Attendance.findOne({
+      where: {
+        userId,
+        checkIn: {
+          [Op.gte]: today,
+          [Op.lt]: tomorrow
+        }
+      }
+    });
+
+    if (!attendance) {
+      return res.status(400).json({ message: 'You have not checked in today' });
+    }
+
+    // Check if break was started
+    const breakStartField = `${breakType}Start`;
+    const breakEndField = `${breakType}End`;
+    
+    if (!attendance[breakStartField]) {
+      return res.status(400).json({ message: `${breakType} break not started` });
+    }
+
+    if (attendance[breakEndField]) {
+      return res.status(400).json({ message: `${breakType} break already ended` });
+    }
+
+    // End the break
+    attendance[breakEndField] = new Date();
+    await attendance.save();
+
+    // Calculate break duration
+    const startTime = new Date(attendance[breakStartField]);
+    const endTime = new Date(attendance[breakEndField]);
+    const durationMs = endTime.getTime() - startTime.getTime();
+    const durationMinutes = Math.floor(durationMs / (1000 * 60));
+
+    res.json({
+      message: `${breakType} break ended successfully`,
+      attendance,
+      breakType,
+      duration: durationMinutes
+    });
+  } catch (error) {
+    console.error('End break error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -158,7 +306,16 @@ exports.getTodayStatus = async (req, res) => {
     res.json({
       checkedIn: !!attendance,
       checkedOut: !!attendance?.checkOut,
-      attendance: attendance || null,
+      attendance: attendance ? {
+        checkIn: attendance.checkIn,
+        checkOut: attendance.checkOut,
+        break1Start: attendance.break1Start,
+        break1End: attendance.break1End,
+        break2Start: attendance.break2Start,
+        break2End: attendance.break2End,
+        lunchStart: attendance.lunchStart,
+        lunchEnd: attendance.lunchEnd
+      } : null,
       onLeave: !!leaveRequest,
       leaveRequest: leaveRequest ? {
         id: leaveRequest.id,

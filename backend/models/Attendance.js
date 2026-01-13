@@ -27,6 +27,38 @@ const Attendance = sequelize.define('Attendance', {
     type: DataTypes.ENUM('present', 'absent', 'half-day'),
     defaultValue: 'present'
   },
+  checkInPhoto: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  checkOutPhoto: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  break1Start: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  break1End: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  break2Start: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  break2End: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  lunchStart: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  lunchEnd: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   notes: {
     type: DataTypes.TEXT,
     allowNull: true

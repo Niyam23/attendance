@@ -30,7 +30,7 @@ const Dashboard: React.FC = () => {
 
   const fetchTodayStatus = async (): Promise<void> => {
     try {
-      const response = await axios.get('http://localhost:5000/api/attendance/today-status');
+      const response = await axios.get('http://192.168.1.29:5000/api/attendance/today-status');
       setTodayStatus(response.data);
     } catch (error) {
       console.error('Error fetching today status:', error);
@@ -43,7 +43,7 @@ const Dashboard: React.FC = () => {
   const handleCheckIn = async (): Promise<void> => {
     setChecking(true);
     try {
-      await axios.post('http://localhost:5000/api/attendance/checkin');
+      await axios.post('http://192.168.1.29:5000/api/attendance/checkin');
       toast.success('Checked in successfully!');
       fetchTodayStatus();
     } catch (error: any) {
@@ -57,7 +57,7 @@ const Dashboard: React.FC = () => {
   const handleCheckOut = async (): Promise<void> => {
     setChecking(true);
     try {
-      await axios.post('http://localhost:5000/api/attendance/checkout');
+      await axios.post('http://192.168.1.29:5000/api/attendance/checkout');
       toast.success('Checked out successfully!');
       fetchTodayStatus();
     } catch (error: any) {

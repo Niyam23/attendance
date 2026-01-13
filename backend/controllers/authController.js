@@ -445,7 +445,7 @@ exports.requestPasswordReset = async (req, res) => {
     });
 
     // Create reset URL
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth?token=${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://192.168.1.29:3000'}/auth?token=${resetToken}`;
 
     // Send email
     try {

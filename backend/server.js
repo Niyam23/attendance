@@ -21,6 +21,7 @@ app.use('/api/otp', require('./routes/otpRoutes'));
 app.use('/api/profile', require('./routes/profileRoutes'));
 app.use('/api/leave', require('./routes/leaveRoutes'));
 app.use('/api/departments', require('./routes/departmentRoutes'));
+app.use('/api/face', require('./routes/faceRoutes'));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -40,6 +41,66 @@ const startServer = async () => {
   try {
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
+
+    // Initialize Face Recognition Service (Python microservice)
+    try {
+      const faceNetService = require('./services/faceNetService');
+      await faceNetService.initialize();
+      console.log('✓ Face Recognition Service initialized successfully');
+    } catch (error) {
+      console.warn('⚠ Face Recognition Service initialization failed:', error.message);
+      console.warn('⚠ Make sure Python service is running on', process.env.PYTHON_SERVICE_URL || 'http://localhost:5001');
+    }
+
+    // Create UserFaceProfiles table if it doesn't exist
+    try {
+      const [tableExists] = await sequelize.query(`
+        SELECT TABLE_NAME 
+        FROM INFORMATION_SCHEMA.TABLES 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'UserFaceProfiles'
+      `);
+      
+      if (tableExists.length === 0) {
+        console.log('Creating UserFaceProfiles table...');
+        await sequelize.query(`
+          CREATE TABLE UserFaceProfiles (
+            id INTEGER AUTO_INCREMENT PRIMARY KEY,
+            userId INTEGER NOT NULL UNIQUE,
+            faceEmbedding TEXT NOT NULL,
+            embeddingCount INTEGER DEFAULT 1,
+            modelVersion VARCHAR(255) DEFAULT 'face-recognition-python',
+            isActive BOOLEAN DEFAULT TRUE,
+            createdAt DATETIME NOT NULL,
+            updatedAt DATETIME NOT NULL,
+            FOREIGN KEY (userId) REFERENCES Users(id) ON DELETE CASCADE
+          )
+        `);
+        console.log('✓ UserFaceProfiles table created successfully');
+      } else {
+        // Check if embeddingCount column exists, add if not
+        const [columns] = await sequelize.query(`
+          SELECT COLUMN_NAME 
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = DATABASE() 
+          AND TABLE_NAME = 'UserFaceProfiles' 
+          AND COLUMN_NAME = 'embeddingCount'
+        `);
+        
+        if (columns.length === 0) {
+          console.log('Adding embeddingCount column to UserFaceProfiles table...');
+          await sequelize.query(`
+            ALTER TABLE UserFaceProfiles 
+            ADD COLUMN embeddingCount INTEGER DEFAULT 1
+          `);
+          console.log('✓ embeddingCount column added successfully');
+        }
+        
+        console.log('✓ UserFaceProfiles table already exists');
+      }
+    } catch (error) {
+      console.error('Warning: Could not create UserFaceProfiles table:', error.message);
+    }
 
     // Manually add departmentId column if it doesn't exist (BEFORE sync to avoid constraint issues)
     try {
@@ -64,6 +125,77 @@ const startServer = async () => {
     } catch (error) {
       console.error('Warning: Could not add departmentId column:', error.message);
       // Continue anyway - column might already exist or table doesn't exist yet
+    }
+
+    // Manually add checkInPhoto and checkOutPhoto columns if they don't exist
+    try {
+      const [checkInPhotoResults] = await sequelize.query(`
+        SELECT COLUMN_NAME 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'Attendances' 
+        AND COLUMN_NAME = 'checkInPhoto'
+      `);
+      
+      if (checkInPhotoResults.length === 0) {
+        console.log('Adding checkInPhoto column to Attendances table...');
+        await sequelize.query(`
+          ALTER TABLE Attendances 
+          ADD COLUMN checkInPhoto VARCHAR(255) NULL COMMENT 'Check-in face photo path'
+        `);
+        console.log('✓ checkInPhoto column added successfully');
+      }
+
+      const [checkOutPhotoResults] = await sequelize.query(`
+        SELECT COLUMN_NAME 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'Attendances' 
+        AND COLUMN_NAME = 'checkOutPhoto'
+      `);
+      
+      if (checkOutPhotoResults.length === 0) {
+        console.log('Adding checkOutPhoto column to Attendances table...');
+        await sequelize.query(`
+          ALTER TABLE Attendances 
+          ADD COLUMN checkOutPhoto VARCHAR(255) NULL COMMENT 'Check-out face photo path'
+        `);
+        console.log('✓ checkOutPhoto column added successfully');
+      } else {
+        console.log('✓ Attendance photo columns already exist');
+      }
+
+      // Add break columns if they don't exist
+      const breakColumns = [
+        { name: 'break1Start', comment: 'Break 1 start time' },
+        { name: 'break1End', comment: 'Break 1 end time' },
+        { name: 'break2Start', comment: 'Break 2 start time' },
+        { name: 'break2End', comment: 'Break 2 end time' },
+        { name: 'lunchStart', comment: 'Lunch break start time' },
+        { name: 'lunchEnd', comment: 'Lunch break end time' }
+      ];
+
+      for (const col of breakColumns) {
+        const [results] = await sequelize.query(`
+          SELECT COLUMN_NAME 
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = DATABASE() 
+          AND TABLE_NAME = 'Attendances' 
+          AND COLUMN_NAME = '${col.name}'
+        `);
+        
+        if (results.length === 0) {
+          await sequelize.query(`
+            ALTER TABLE Attendances 
+            ADD COLUMN ${col.name} DATETIME NULL COMMENT '${col.comment}'
+          `);
+          console.log(`✓ ${col.name} column added successfully`);
+        }
+      }
+      console.log('✓ All break columns checked');
+    } catch (error) {
+      console.error('Warning: Could not add attendance columns:', error.message);
+      // Continue anyway - columns might already exist or table doesn't exist yet
     }
 
     // Sync database (creates tables if they don't exist)
@@ -129,7 +261,7 @@ const startServer = async () => {
 
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
-      console.log(`Health check: http://localhost:${PORT}/api/health`);
+      console.log(`Health check: http://192.168.1.29:${PORT}/api/health`);
     });
   } catch (error) {
     console.error('Unable to connect to the database:', error);

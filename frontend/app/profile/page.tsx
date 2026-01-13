@@ -115,7 +115,7 @@ const ProfilePage: React.FC = () => {
         joiningDate: userData.createdAt || userData.joiningDate || ''
       });
       if (userData.profilePhoto) {
-        setPreviewPhoto(`http://localhost:5000${userData.profilePhoto}`);
+        setPreviewPhoto(`http://192.168.1.29:5000${userData.profilePhoto}`);
       }
       setPhoneVerified(userData.isMobileVerified || false);
     } catch (error) {
@@ -291,7 +291,7 @@ const ProfilePage: React.FC = () => {
 
     setSendingOtp(true);
     try {
-      const response = await axios.post('http://localhost:5000/api/otp/send', {
+      const response = await axios.post('http://192.168.1.29:5000/api/otp/send', {
         mobileNumber: profileData.phone
       });
       if (response.data.success) {
@@ -313,7 +313,7 @@ const ProfilePage: React.FC = () => {
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/api/otp/verify', {
+      const response = await axios.post('http://192.168.1.29:5000/api/otp/verify', {
         mobileNumber: profileData.phone,
         otp: profileData.otp
       });

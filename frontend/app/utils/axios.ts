@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance
 const axiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.29:5000/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -43,7 +43,7 @@ axiosInstance.interceptors.response.use(
       if (typeof window !== 'undefined' && 
           window.location.pathname !== '/auth' && 
           !url.includes('/auth/me')) {
-        // Token expired or invalid, clear it
+      // Token expired or invalid, clear it
         localStorage.removeItem('token');
         // Only redirect if not already on auth page and not during initial auth check
         window.location.href = '/auth';
